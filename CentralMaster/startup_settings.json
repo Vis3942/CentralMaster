@@ -1,0 +1,8 @@
+{
+  "plcPortName": "/dev/ttyO1",
+  "uiConnectionName": "",
+  "StatusPipeConnectionName": "DCStatusPipe",
+  "AppTrueState": "CM-PLN-True",
+  "AppFalseState": "CM-PLN-False",
+  "PingIntervalSeconds": 2
+}

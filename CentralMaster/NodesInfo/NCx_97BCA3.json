@@ -1,0 +1,72 @@
+{
+  "devices": [
+    {
+      "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d93",
+      "device": "Seimens_QSM2100_PM10",
+      "channel": 0,
+      "config_command": "",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "GetParticulateData_PM10",
+          "data_names": "pm10:IX",
+          "order": 0
+        }
+      ]
+    },
+    {
+      "uuid": "4146c113-5251-48bf-be77-1edc9bb6aaee",
+      "device": "Seimens_QSM2100_PM2_5",
+      "channel": 1,
+      "config_command": "",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "GetParticulateData2_5",
+          "data_names": "pm2_5:VIII",
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "computedData": {
+    "name": "ComputedAhDpHi",
+    "uuid": "97141232-b4eb-427d-9d28-7c90e0065343",
+    "description": "compute data based on sensors in this node",
+    "compute": "ConvertData.GetComputedData",
+    "data_names": "abs_humidity, dew_point, heat_index, flow_rate, power",
+    "data": [
+      {
+        "name": "abs_humidity",
+        "description": "0-100%",
+        "type": "float",
+        "units": "gm/m^3"
+      },
+      {
+        "name": "dew_point",
+        "description": "value in range 32 to 122 deg F",
+        "type": "float",
+        "units": "deg F"
+      },
+      {
+        "name": "heat_index",
+        "description": "value in range 32 to 122 deg F",
+        "type": "float",
+        "units": "deg F"
+      },
+      {
+        "name": "flow_rate",
+        "description": "dependent on the air speed and duct cross-section",
+        "type": "float",
+        "units": "ft/m^3"
+      },
+      {
+        "name": "power",
+        "description": "power consumed in VA",
+        "type": "float",
+        "units": "VA"
+      }
+    ]
+  }
+
+}

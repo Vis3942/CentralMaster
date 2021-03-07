@@ -1,0 +1,13 @@
+{
+   "devices": [{
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d93",
+    "device": "SM-UART-04L",
+    "channel":  0,
+    "config_command": "Config",
+    "init_command": "Initialize",
+    "data_commands": [{
+        "name": "Get PM2.5 Data",
+        "order": 0
+    }]
+   }]
+}

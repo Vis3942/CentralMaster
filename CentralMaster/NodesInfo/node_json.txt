@@ -1,0 +1,67 @@
+Old version:
+Latest revision is in file Node_json_readme.txt (See this file for latest information)
+
+For node "nc1:00000050" a file "nc1_000000050.json" will create the following json info
+[{
+		"uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d93",
+		"device": "SM-UART-04L",
+		"config_command": "Config",
+		"init_command": "Initialize",
+		"data_commands": [{
+			"name": "Get PM2.5 Data",
+			"order": 0
+		}]
+	},
+	{
+		"uuid": "4146c113-5251-48bf-be77-1edc9bb6aaee",
+		"device": "ResponseOneWeatherTransmitter",
+		"config_command": "Config",
+		"init_command": "",
+		"data_commands": [{
+			"name": "Get Weather Data",
+			"order": 0
+		}]
+	}
+]
+If file "<common name>_<serical_number>.json does not exist, simply send data command
+
+
+if "device" is "<nodename: commonname-serialnumber>", than a data PLC command is sent out
+
+"config_command" => name of command from device json file to use to configure 
+        communication to device from node
+
+"init_command" => name of command from device json file that is used to initialize sensor
+        needs to be run every time node connects / powers up
+
+"data_commands" => array of commands that must be sent to device. for rs232 and rs485
+each command will contain: data and order fields (int). If order fields are all same value
+the system will set the order based on the json serializer. 
+        {
+            "data": "Get PM2.5 Data",
+            "order" : 1
+        }
+
+        If multiple data commands exist then each command will be sent, data received and then
+        next command sent, data received, .... before moving on to the next node in the 
+        Round Robin
+
+     
+
+
+Each installation will contain a device file name 
+PowerMeasurement.json => which contains the command name "default", which becomes the basic data request 
+	command in the binary protocol defined between nodes and DC.  
+	field "channel" will be "core"
+	field "commands" array will contain a single command with values
+		name: "default",
+		send_type: "",
+		send_command: "",
+		"resp_type" : "binary",
+        "resp_interpret" : 
+        [
+        	"line1compute cs",
+            "line2compute cs",
+            "line3compute cs"
+        ]
+

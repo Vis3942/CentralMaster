@@ -1,0 +1,2221 @@
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Dynamic;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Timers;
+using CentralMaster.json;
+//using Newtonsoft.Json;
+using UtilsLibrary;
+
+/*
+enum ServiceNodeStates : ushort
+{
+    INITIALIZED, // INTRODUCED TO INCLUDE A DELAY OF 500 MS before sending out any messages from this node
+    ATTACHED,
+    AUTHENTICATE_DEVICE,
+    AUTHENTICATE_KEYS,
+    SESSION_KEYS,
+    COMM_READY,
+    SHUTDOWN
+}
+*/
+
+
+
+// replacing states with message based named in that state till it goes to READY
+enum ServiceNodeStates : ushort
+{
+
+	ATTACHED, // INTRODUCED TO INCLUDE A DELAY OF 500 MS before sending out any messages from the next node
+	COMMON_NAME,
+	SYNC_TIME,
+	CAPABILITY,
+	PROTOCOL_SETUP,
+	COMM_READY,
+	SHUTDOWN
+}
+
+enum StatusValues : byte
+{
+	SUCCESS = 0x00,
+	DECRYPT_FAILED = 0x01,
+	INVALID_COMMAND = 0x02,
+	INVALID_RANGE = 0x03,
+	OTHER = 0x04
+}
+
+enum ProtocolIdentifiers : ushort
+{
+	CAPABILITY_REQUEST_ID = 0x0001,
+	CAPABILITY_RESPONSE_ID = 0x0002,
+	DATA_REQUEST_ID = 0x0003,
+	DATA_RESPONSE_ID = 0x0004,
+	COMMAND_REQUEST_ID = 0x0005,
+	COMMAND_RESPONSE_ID = 0x0006,
+	SIGNATURE_REQUEST_ID = 0x0007,
+	SIGNATURE_RESPONSE_ID = 0x0008,
+	PUBLICKEY_REQUEST_ID = 0x0009,
+	PUBLICKEY_RESPONSE_ID = 0x000a,
+	SESSION_REQUEST_ID = 0x000b,
+	SESSION_RESPONSE_ID = 0x000c,
+	RESET_REQUEST_ID = 0x000d,
+	RESET_RESPONSE_ID = 0x000e,
+	COMMON_NAME_REQUEST_ID = 0X000f,
+	COMMON_NAME_RESPONSE_ID = 0X0010,
+	SYNC_TIME_REQUEST_ID = 0x0011,
+	SYNC_TIME_RESPONSE_ID = 0x0012,
+	RS232_COMMAND_ID = 0x0017,
+	RS232_RESPONSE_ID = 0x0018,
+	BRIDGENODE_DATA_RESPONSE_ID = 0x0020,
+	BRIDGENODE_COMMAND_RESPONSE_ID = 0x0022
+}
+
+enum ServiceNodeCapability:ushort
+{
+	/*
+     * Note if any elements are added to NODE_CAPABILITY_IDS in the ServiceNode class, a new enum value must be added to this class
+     */ 
+	CPB_ONOFF = 0x8001,
+	CPB_INTENSITY = 0x8002,
+	CPB_RGB = 0x8003,
+	CPB_ACTIVE_POWER = 0x0004,
+	CPB_CUMULATIVE_ENERGY = 0x0005,
+	CPB_VOLTAGE = 0x0006,
+	CPB_MONITORING_STATUS = 0x0007,
+	CPB_PERSON_DETECT = 0x0008,
+	CPB_TEMPERATURE = 0x0009,
+	CPB_HUMIDITY = 0x000a,
+	CPB_PRESSURE = 0x000b,
+	CPB_AMBIENT_LIGHT = 0x000c,
+	CPB_VOLATILE_ORGANIC = 0x000d,
+	CPB_C02 = 0x000e,
+	CPB_MOTION_DETECT = 0x000f,
+	CPB_REPORT_INTERVAL = 0x8011,
+	CPB_LINE_CURRENT = 0x0012,
+	CPB_ASYNC_MSG_COUNT = 0x0016,
+	CPB_LINK_QUALITY = 0x0017
+
+}
+
+
+namespace CentralMaster
+{
+	public class ServiceNode //: INotifyPropertyChanged
+	{
+
+		#region static_utils_func
+		public static string GetCapabilityName(ushort capability)
+		{
+			string tmp_name = "";
+			switch (capability)
+			{
+				case (ushort)ServiceNodeCapability.CPB_ONOFF:
+					tmp_name = "OnOff";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_INTENSITY:
+					tmp_name = "Brightness";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_RGB:
+					tmp_name = "RGB";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_ACTIVE_POWER:
+					tmp_name = "Active_Power";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_CUMULATIVE_ENERGY:
+					tmp_name = "Cumulative_Energy";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_VOLTAGE:
+					tmp_name = "Voltage";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_MONITORING_STATUS:
+					tmp_name = "Monitoring_Status";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_PERSON_DETECT:
+					tmp_name = "Person_In";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_TEMPERATURE:
+					tmp_name = "Temperature";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_HUMIDITY:
+					tmp_name = "Humidity";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_PRESSURE:
+					tmp_name = "Pressure";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_AMBIENT_LIGHT:
+					tmp_name = "Ambient_Light";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_VOLATILE_ORGANIC:
+					tmp_name = "Volatile_Organic";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_C02:
+					tmp_name = "co2";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_MOTION_DETECT:
+					tmp_name = "Motion";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_REPORT_INTERVAL:
+					tmp_name = "Report_Interval";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_LINE_CURRENT:
+					tmp_name = "Current";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_ASYNC_MSG_COUNT:
+					tmp_name = "Async_Message_Count";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_LINK_QUALITY:
+					tmp_name = "Link_Quality";
+					break;
+			}
+			return tmp_name;
+
+		}
+
+		public static string GetCapabilityUnits(ushort capability)
+		{
+			string tmp_units = "";
+			switch (capability)
+			{
+				case (ushort)ServiceNodeCapability.CPB_INTENSITY:
+					tmp_units = "%";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_ACTIVE_POWER:
+					tmp_units = "watts";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_CUMULATIVE_ENERGY:
+					tmp_units = "Wh";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_VOLTAGE:
+					tmp_units = "V rms";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_TEMPERATURE:
+					tmp_units = "degC";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_HUMIDITY:
+					tmp_units = "%RH";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_PRESSURE:
+					tmp_units = "hPa";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_AMBIENT_LIGHT:
+					tmp_units = "lux";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_VOLATILE_ORGANIC:
+					tmp_units = "ppb";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_C02:
+					tmp_units = "ppm";
+					break;
+				case (ushort)ServiceNodeCapability.CPB_LINE_CURRENT:
+					tmp_units = "mA rms";
+					break;
+			}
+			return tmp_units;
+
+		}
+
+
+		public static string GetStatusAsString(byte status_val)
+		{
+			if (status_val == (byte)StatusValues.SUCCESS)
+			{
+				return "Success";
+			}
+			else if (status_val == (byte)StatusValues.DECRYPT_FAILED)
+			{
+				return "Decrypt Failed";
+			}
+			else if (status_val == (byte)StatusValues.INVALID_COMMAND)
+			{
+				return "Invalid Command";
+			}
+			else if (status_val == (byte)StatusValues.INVALID_RANGE)
+			{
+				return "Invalid Range";
+			}
+			else if (status_val == (byte)StatusValues.OTHER)
+			{
+				return "Other";
+			}
+			return "";
+		}
+
+		public static void AddProperty(ExpandoObject expando, string propertyName, object propertyValue)
+		{
+			// ExpandoObject supports IDictionary so we can extend it like this
+			var expandoDict = expando as IDictionary<string, object>;
+			if (expandoDict.ContainsKey(propertyName))
+				expandoDict[propertyName] = propertyValue;
+			else
+				expandoDict.Add(propertyName, propertyValue);
+		}
+
+		private static bool TestForDictionaryEquality(Dictionary<string, string> dict, Dictionary<string, string> dict2)
+		{
+			// Test for equality.
+			bool equal = false;
+			if (dict.Count == dict2.Count) // Require equal count.
+			{
+				equal = true;
+				foreach (var pair in dict)
+				{
+					string value;
+					if (dict2.TryGetValue(pair.Key, out value))
+					{
+						// Require value be equal.
+						if (value != pair.Value)
+						{
+							equal = false;
+							break;
+						}
+					}
+					else
+					{
+						// Require key be present.
+						equal = false;
+						break;
+					}
+				}
+			}
+			return equal;
+		}
+
+
+		// static ServiceNode()
+		// {
+		// 	LoadNodeParameters();
+		// }
+		#endregion //static_utils_func
+
+
+		#region protocol_vars
+		private ushort[] NODE_CAPABILITY_IDS =
+		{
+			0x8001, 0x8002, 0x8003, 0x0004,
+			0x0005, 0x0006, 0x0007, 0x0008,
+			0x0009, 0x000a, 0x000b, 0x000c,
+			0x000d, 0x000e, 0x000f, 0x0010,
+			0x8011, 0x0012, 0x0016
+		};
+
+		private ushort[] NODE_CAPABILITY_DATA_LENGTHS =
+		{
+			0x0001, 0x0002, 0x0003, 0x0004,
+			0x0004, 0x0004, 0x0001, 0x0001,
+			0x0004, 0x0004, 0x0004, 0x0004,
+			0x0002, 0x0002, 0x0001, 0x000c,
+			0x0004, 0x0004, 0x0001
+		};
+
+		private string[] NODE_CAPABILITY_NAMES =
+		{
+			"CPB_ONOFF", "CPB_INTENSITY", "CPB_RGB", "CPB_ACTIVE_POWER",
+			"CPB_REACTIVE_POWER", "CPB_VOLTAGE", "CPB_MONITORING_STATUS", "CPB_PERSON_DETECT",
+			"CPB_TEMPERATURE", "CPB_HUMIDITY", "CPB_PRESSURE", "CPB_AMBIENT_LIGHT",
+			"CPB_VOLATILE_ORGANIC", "CPB_C02", "CPB_MOTION_DETECT", "CPB_TIME",
+			"CPB_REPORT_INTERVAL", "CPB_LINE_CURRENT", "CPB_ASYNC_MSG_COUNT"
+
+		};
+
+
+
+		#endregion // protocol_vars
+
+		#region vars
+		private byte[] _node_ipv6addr = null;
+		private string _node_ipv6addr_str = "";
+		private byte[] _extended_addr = null;
+		private G3.HostMessages _host_messaging = null;
+		private ushort _current_state;
+		CancellationTokenSource msg_recv = new CancellationTokenSource();
+		private bool sentCommonNameRequest = false;
+		private bool receivedCommonNameResponse = false;
+		private bool _updateViewThisSerialNumber = true;
+		private bool sentCapabilityRequest = false;
+		private bool receivedCapabilityResponse = false;
+		private bool sentSyncTimeRequest = false;
+		private bool receivedSyncTimeResponse = false;
+		private bool sentProtocolSetupRequest = false;
+		private bool receivedProtocolSetupResponse = false;
+		private bool shutdownRequest = false;
+		//private bool sentResetRequest = false;
+		//private bool receivedResetResponse = false;
+		private byte[] recv_b = null;
+		private System.Timers.Timer main_timer = null;
+		private int timer_count;
+		private int required_timer_count;
+		private double timer_interval;
+		private const int TIMEOUT_SECS = 30; // tocheck and change
+		private DateTime time_sent;
+		private bool timer_started = false;
+
+		private Random rnd_node = new Random(DateTime.Now.Millisecond);
+
+		private string _common_name = "None";
+		private string _serial_num = "None"; // default value if no serial number is present
+		private ushort[] _capability = null;
+
+		public dynamic _props;
+		private Dictionary<ushort, string> id_name = new Dictionary<ushort, string>();
+		private Dictionary<ushort, ushort> id_length = new Dictionary<ushort, ushort>();
+		//private string _command_status="Status Messages here...";
+
+		private bool _added_to_list = false;
+
+		private bool _do_log = false;
+
+		private bool _pause_state_machine = false;
+		//public event PropertyChangedEventHandler PropertyChanged;
+
+		private bool _exit_mode = false;
+
+		private Communications.ITransmit _itransmit_comms = null;
+
+		private ushort transmit_id;
+		private ushort receive_id;
+
+		private bool _tx_rx_resp = false;
+		private Object _tx_rx_lock = new Object();
+
+		private bool _data_cmd_done = false;
+
+		private int _number_async_messages = 0;
+
+		private AutoResetEvent resp_recv_event = new AutoResetEvent(false);
+		private AutoResetEvent confirmation_recv_event = new AutoResetEvent(false);
+		private int rd_rx_timeout_milliseconds = 0;
+
+		private int rd_confirmation_timeout_millisecs;
+
+		private Object _state_machine_lock = new Object();
+		private bool _state_machine_exec = false;
+		private int link_qti = -1;
+		private DateTime _attach_time;
+		private DateTime _data_cmd_time;
+		private bool _is_in_subnetDC = false;
+
+		private NodeDevices node_devices = null;
+
+		private ConcurrentQueue<RRCommand> sn_rr_queue = new ConcurrentQueue<RRCommand>();
+		private ConcurrentDictionary<string, bool> configured = new ConcurrentDictionary<string, bool>();
+		private ConcurrentDictionary<string, bool> initialized = new ConcurrentDictionary<string, bool>();
+		private RRCommand curr_rr_cmd = null;
+
+		private bool send_to_cloud = false; //true;
+
+		private int rd_rrtask_sleep_secs = 300;
+
+		#endregion // vars
+
+		#region property
+		public string CommonName
+		{
+			get { return _common_name; }
+		}
+
+		public string SerialNumber
+		{
+			get { return _serial_num; }
+		}
+
+		public bool UpdateViewThisSerialNumber
+		{
+			get { return _updateViewThisSerialNumber; }
+			set { _updateViewThisSerialNumber = value; }
+		}
+
+		public ushort[] Capability
+		{
+			get { return _capability; }
+		}
+
+		public dynamic Props
+		{
+			get { return _props; }
+		}
+
+		public bool AddedToList
+		{
+			get { return _added_to_list; }
+			set
+			{
+				_added_to_list = value;
+			}
+		}
+
+		public byte[] IPv6AddressBytes
+		{
+			get { return _node_ipv6addr; }
+		}
+
+		public string IPv6AddresString
+		{
+			get { return _node_ipv6addr_str; }
+		}
+		public byte[] ExtendedAddress
+		{
+			get { return _extended_addr; }
+		}
+
+		public ushort NodeState
+		{
+			get { return _current_state; }
+		}
+
+		public bool IsReadyState
+		{
+			get 
+			{
+				return (_current_state == (ushort)ServiceNodeStates.COMM_READY);
+			}
+		}
+
+		public bool ExitMode
+		{
+			get
+			{
+				return _exit_mode;
+			}
+			set
+			{
+				_exit_mode = value;
+			}
+		}
+
+		public bool StateMachinePause
+		{
+			get { return _pause_state_machine; }
+			set 
+			{ 
+				_pause_state_machine = value; 
+				if (_pause_state_machine == true) 
+				{
+					//Console.WriteLine("SM: Pause property State machine");
+					CheckExecuteStateMachine(false);
+				}
+			}
+		}
+
+
+		public bool RxResponseForTx 
+		{
+			get 
+			{
+				bool to_ret_bool;
+				lock(_tx_rx_lock)
+				{
+					to_ret_bool = _tx_rx_resp;
+				}
+				return to_ret_bool;
+			}
+			set 
+			{
+				bool to_set_bool = value;
+				lock(_tx_rx_lock)
+				{
+					_tx_rx_resp = to_set_bool;
+				}
+			}
+		}
+
+		public bool DataCommandDone 
+		{
+			get 
+			{
+				return _data_cmd_done;
+			}
+			set
+			{
+				_data_cmd_done = value;
+			}
+		}
+
+		public int DataAsyncMessageCount
+		{
+			get {
+				return _number_async_messages;
+			}
+		}
+
+		public DateTime GetAttachTime
+		{
+			get {
+				return _attach_time;
+			}
+		}
+
+		public double TimeSecondsSinceAttach
+		{
+			get {
+				DateTime dt_now = DateTime.Now;
+				return ( (dt_now - _attach_time).TotalSeconds + 2.0); // adding 2 to support border line cases 			
+			}
+		}
+
+		public double TimeSecondsSinceDataRequest
+		{
+			get {
+				if (_data_cmd_time != DateTime.MinValue)
+				{
+					DateTime dt_now = DateTime.Now;
+					return ( (dt_now - _attach_time).TotalSeconds + 2.0); // adding 2 to support border line cases 			
+				}
+				else 
+				{
+					return 0.0;
+				}
+			}
+		}
+
+		public bool isPartOfSubnetDC
+		{
+			get {
+				return _is_in_subnetDC;
+			}
+			set
+			{ _is_in_subnetDC = value;}
+		}
+
+		public bool SendToCloud
+		{
+			get {
+				return send_to_cloud;
+			}
+			set {
+				send_to_cloud = value;
+			}
+		}
+
+		#endregion // property
+
+		public ServiceNode(byte[] node_ipv6addr, byte[] ext_addr, G3.HostMessages host_messaging, 
+		                   System.Timers.Timer app_timer, Communications.ITransmit itransmit_comms, 
+						   int rd_rx_timeout_ms, int rd_confirmation_timeout_secs)
+		{
+			// node is created when a new ATTACH message is received by the device
+			_node_ipv6addr = new byte[node_ipv6addr.Length];
+			Array.Copy(node_ipv6addr, _node_ipv6addr, node_ipv6addr.Length);
+			_node_ipv6addr_str = BitConverter.ToString(node_ipv6addr);
+			_extended_addr = new byte[ext_addr.Length];
+			Array.Copy(ext_addr, _extended_addr, ext_addr.Length);
+			_host_messaging = host_messaging;
+			main_timer = app_timer;
+			timer_interval = main_timer.Interval;
+			_itransmit_comms = itransmit_comms;
+			StartServiceNodeStateMachine();
+			for (int ii = 0; ii < NODE_CAPABILITY_IDS.Length; ii++)
+			{
+				id_name.Add(NODE_CAPABILITY_IDS[ii], NODE_CAPABILITY_NAMES[ii]);
+				id_length.Add(NODE_CAPABILITY_IDS[ii], NODE_CAPABILITY_DATA_LENGTHS[ii]);
+			}
+
+			rd_rx_timeout_milliseconds = rd_rx_timeout_ms;
+			rd_confirmation_timeout_millisecs = rd_confirmation_timeout_secs * 1000; 
+			_attach_time = DateTime.Now;
+		}
+
+
+		#region state_machine
+		private void StartServiceNodeStateMachine()
+		{
+			sentCommonNameRequest = false;
+			receivedCommonNameResponse = false;
+			sentCapabilityRequest = false;
+			receivedCapabilityResponse = false;
+			sentProtocolSetupRequest = false;
+			receivedProtocolSetupResponse = false;
+			// _current_state = (ushort)ServiceNodeStates.ATTACHED;
+			// StateMachine(); // moves it to common name state
+			_current_state = (ushort)ServiceNodeStates.PROTOCOL_SETUP;
+			_pause_state_machine = true;
+			//StateMachine();
+		}
+
+		public void ExtStateMachine()
+		{
+			//Console.WriteLine("SM: EXT State machine");
+			Task.Run( () => CheckExecuteStateMachine(false));
+		}
+
+		private void CheckExecuteStateMachine(bool wait_and_execute)
+		{
+			// if bool wait_and_exec is true, wait for current statemachine to complete and then execute
+			// else if wait_and_exec is false, exit immediately without calling statemachine
+			bool is_exec;
+			int loop_max; // 300 ms it must finish
+			lock(_state_machine_lock)
+			{
+				is_exec = _state_machine_exec;
+			}
+			if (!wait_and_execute)
+			{
+				if (!is_exec)
+				{
+					// debug
+					//Console.WriteLine("CESM: Executing SM");
+					StateMachine();
+				}
+			}
+			else 
+			{
+				loop_max = 0;
+				while ( (is_exec) && (loop_max < 10) ) 
+				{
+					System.Threading.Thread.Sleep(100);
+					loop_max ++;
+					// wait for current execution to complete
+					lock(_state_machine_lock)
+					{
+						is_exec = _state_machine_exec;
+					}
+				}
+				if (!is_exec) 
+				{
+					// debug
+					//Console.WriteLine("CESM: Executing SM");
+					StateMachine();
+				} 
+				else 
+				{
+					Console.WriteLine("Wait to execute state machine failed. Current Exection of state machine did not complete in 1sed");
+				}
+			}
+		}
+		private void StateMachine()
+		{
+			lock(_state_machine_lock)
+			{
+				_state_machine_exec = true;
+			}
+			//Console.WriteLine(string.Format("executing state machine => {0}", _current_state));
+			//Console.WriteLine(string.Format("state machine {2} => 0x{0:x} at {1}", _current_state, 
+			//	DateTime.Now.TimeOfDay.ToString(), BitConverter.ToString(_node_ipv6addr)));
+
+			if (_pause_state_machine)
+			{
+				lock(_state_machine_lock)
+				{
+					_state_machine_exec = false;
+				}
+				//Console.WriteLine("DONE executing state machine in pause.");
+				return;
+			}
+			if (_current_state == (ushort)ServiceNodeStates.ATTACHED)
+			{
+				//Thread.Sleep(500);
+				//_current_state = (ushort)(ServiceNodeStates.COMMON_NAME);
+				_current_state = (ushort)(ServiceNodeStates.PROTOCOL_SETUP);
+			}
+			else if (_current_state == (ushort) ServiceNodeStates.PROTOCOL_SETUP)
+			{
+				Console.WriteLine("in protocol setup state machine");
+				ProtocolSetupTask();
+			}
+			// else if (_current_state == (ushort)ServiceNodeStates.COMMON_NAME)
+			// {
+			// 	CommonNameTask();
+			// }
+			// else if (_current_state == (ushort)ServiceNodeStates.SYNC_TIME)
+			// {
+			// 	SyncTimeTask();
+			// }
+			// else if (_current_state == (ushort)ServiceNodeStates.CAPABILITY)
+			// {
+			// 	CapabilityTask();
+			// }
+			else if (_current_state == (ushort)ServiceNodeStates.COMM_READY)
+			{
+				CommReadyTask();
+			}
+			else if (_current_state == (ushort)ServiceNodeStates.SHUTDOWN)
+			{
+				// do nothing
+				// cannot leave shutdown state.. will not process any data... need to dispose and create a new node
+				_pause_state_machine = true;
+			}
+			lock(_state_machine_lock)
+			{
+				_state_machine_exec = false;
+			}
+			//Console.WriteLine("DONE executing state machine");
+
+		}
+
+		private void StateMachineNextState(string trigger_str)
+		{
+			// bool state_changed = false;
+			if ((_current_state == (ushort)ServiceNodeStates.COMMON_NAME) &&
+				(trigger_str.Equals("RECEIVED_COMMON_NAME_RESPONSE"))
+			)
+			{
+				_current_state = (ushort)ServiceNodeStates.SYNC_TIME;
+				// state_changed = true;
+			}
+			else if ((_current_state == (ushort)ServiceNodeStates.SYNC_TIME) &&
+				(trigger_str.Equals("RECEIVED_SYNC_TIME_RESPONSE"))
+			)
+			{
+				_current_state = (ushort)ServiceNodeStates.CAPABILITY;
+				// state_changed = true;
+			}
+			else if ((_current_state == (ushort)ServiceNodeStates.CAPABILITY) &&
+				(trigger_str.Equals("RECEIVED_CAPABILITY_RESPONSE"))
+			)
+			{
+				_current_state = (ushort)ServiceNodeStates.COMM_READY;
+				// state_changed = true;
+			}
+			else if ((_current_state == (ushort) ServiceNodeStates.PROTOCOL_SETUP) &&
+				(trigger_str.Equals("RECEIVED_PROTOCOLSETUP_RESPONSE"))
+			)
+			{
+				// debug
+				//Console.WriteLine("going to comm ready from proto setup");
+				_current_state = (ushort)ServiceNodeStates.COMM_READY;
+				// state_changed = true;
+			}
+			else if ( ( (_current_state == (ushort) ServiceNodeStates.PROTOCOL_SETUP) || 
+						(_current_state == (ushort)ServiceNodeStates.COMM_READY) ) &&
+					  (trigger_str.Equals("SHUTDOWN")
+				    )
+			)
+			{
+				_current_state = (ushort)ServiceNodeStates.SHUTDOWN;
+				// state_changed = true;
+			}
+
+			// if ( (state_changed) && (trigger_str.Equals("SHUTDOWN") ) )
+			// {
+			// 	//Console.WriteLine("in state changed statemachine call");
+			// 	Console.WriteLine("SM: state changed State machine");
+			// 	CheckExecuteStateMachine(true);
+			// }
+		}
+
+		private void CommonNameTask()
+		{
+			if (recv_b != null)
+			{
+				ushort message_id = BitConverter.ToUInt16(recv_b, 2);
+				if (message_id == (ushort)ProtocolIdentifiers.COMMON_NAME_RESPONSE_ID)
+				{
+					ProcessCommonNameData(recv_b);
+					recv_b = null;
+					receivedCommonNameResponse = true;
+					_updateViewThisSerialNumber = false;
+				}
+			}
+
+			if (!sentCommonNameRequest || !receivedCommonNameResponse)
+			{
+				if ((!sentCommonNameRequest) || (sentCommonNameRequest && (DateTime.Now.Subtract(time_sent).TotalSeconds >= TIMEOUT_SECS)))
+				{
+					ushort pkt_len = ProtocolMessagesG3PLC.CommonNameRequestPacketLen();
+					byte[] pkt = new byte[pkt_len];
+					ProtocolMessagesG3PLC.CommonNameRequestPacket(pkt, pkt_len);
+					TransmitDataToNode(pkt, _node_ipv6addr, true);
+					time_sent = DateTime.Now;
+					sentCommonNameRequest = true;
+					startCounting(TIMEOUT_SECS + rnd_node.Next(-15, 15)); // ADD A RANDOM plus or minus 15 SECS DELAY
+				}
+			}
+			else if (receivedCommonNameResponse)
+			{
+				// goto next state
+				StateMachineNextState("RECEIVED_COMMON_NAME_RESPONSE");
+			}
+
+		}
+
+		private void SyncTimeTask()
+		{
+			if (recv_b != null)
+			{
+				ushort message_id = BitConverter.ToUInt16(recv_b, 2);
+				if (message_id == (ushort)ProtocolIdentifiers.SYNC_TIME_RESPONSE_ID)
+				{
+					// process time data
+					if (recv_b[4] == 0x00) // success
+					{
+						receivedSyncTimeResponse = true;
+					}
+					recv_b = null;
+				}
+			}
+			if (!sentSyncTimeRequest || !receivedSyncTimeResponse)
+			{
+				if ((!sentSyncTimeRequest) || (sentSyncTimeRequest && (DateTime.Now.Subtract(time_sent).TotalSeconds >= TIMEOUT_SECS)))
+				{
+					ushort pkt_len = ProtocolMessagesG3PLC.SyncTimeRequestPacketLen();
+					byte[] pkt = new byte[pkt_len];
+					byte[] time_b;
+					StringBuilder sb = new StringBuilder();
+					DateTime curr_time = DateTime.Now;
+					sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Month, curr_time.Day, curr_time.Year - 2000));
+					sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Hour, curr_time.Minute, curr_time.Second));
+					sb.Append(string.Format("{0:d2}", curr_time.DayOfWeek ) );
+					time_b = ASCIIEncoding.ASCII.GetBytes(sb.ToString());
+					ProtocolMessagesG3PLC.SyncTimeRequestPacket(pkt, pkt_len, time_b, (ushort)time_b.Length);
+					TransmitDataToNode(pkt, _node_ipv6addr, true);
+					time_sent = DateTime.Now;
+					sentSyncTimeRequest = true;
+					startCounting(TIMEOUT_SECS + rnd_node.Next(-15, 15)); // ADD A RANDOM plus or minus 15 SECS DELAY
+				}
+			}
+			else if (receivedSyncTimeResponse)
+			{
+				// goto next state
+				StateMachineNextState("RECEIVED_SYNC_TIME_RESPONSE");
+			}
+		}
+
+		private void CapabilityTask()
+		{
+			if (recv_b != null)
+			{
+				ushort message_id = BitConverter.ToUInt16(recv_b, 2);
+				if (message_id == (ushort)ProtocolIdentifiers.CAPABILITY_RESPONSE_ID)
+				{
+					ProcessCapabilityData(recv_b);
+					recv_b = null;
+					receivedCapabilityResponse = true;
+				}
+			}
+			if (!sentCapabilityRequest || !receivedCapabilityResponse)
+			{
+				if ((!sentCapabilityRequest) || (sentCapabilityRequest && (DateTime.Now.Subtract(time_sent).TotalSeconds >= TIMEOUT_SECS)))
+				{
+					ushort pkt_len = ProtocolMessagesG3PLC.CapabilityRequestPacketLen();
+					byte[] pkt = new byte[pkt_len];
+					ProtocolMessagesG3PLC.CapabilityRequestPacket(pkt, pkt_len);
+					TransmitDataToNode(pkt, _node_ipv6addr, true);
+					time_sent = DateTime.Now;
+					sentCapabilityRequest = true;
+					startCounting(TIMEOUT_SECS + rnd_node.Next(-15, 15)); // ADD A RANDOM plus or minus 15 SECS DELAY
+				}
+			}
+			else if (receivedCapabilityResponse)
+			{
+				// goto next state
+				StateMachineNextState("RECEIVED_CAPABILITY_RESPONSE");
+			}
+		}
+
+		private void ProtocolSetupTask()
+		{
+			int index;
+			byte[] tmp_b;
+			int tmp_b_len;
+			// if asked to shutdown go to the shutdown state
+			if (shutdownRequest)
+			{
+				StateMachineNextState("SHUTDOWN");
+				recv_b = null;
+				return;
+			}
+
+			if (recv_b != null)
+			{
+				// debug
+				//Console.WriteLine(BitConverter.ToString(recv_b));
+				index = 2;
+				while (index < recv_b.Length)
+				{
+					// debug
+					//Console.WriteLine(string.Format("index protocol setup task : {0}, tot len {1}", index, recv_b.Length));
+					ushort message_id = BitConverter.ToUInt16(recv_b, index+2);
+					if (message_id == (ushort)ProtocolIdentifiers.COMMON_NAME_RESPONSE_ID)
+					{
+						tmp_b_len = BitConverter.ToUInt16(recv_b, index);
+						tmp_b = new byte[tmp_b_len];
+						Array.Copy(recv_b, index, tmp_b, 0, tmp_b_len);
+						ProcessCommonNameData(tmp_b);
+						receivedCommonNameResponse = true;
+						_updateViewThisSerialNumber = false;
+						index += tmp_b_len;
+					}
+					else if (message_id == (ushort)ProtocolIdentifiers.SYNC_TIME_RESPONSE_ID)
+					{
+						tmp_b_len = BitConverter.ToUInt16(recv_b, index);
+						tmp_b = new byte[tmp_b_len];
+						// process time data
+						if (recv_b[index+4] == 0x00) // success
+						{
+							receivedSyncTimeResponse = true;
+						}
+						index += tmp_b_len;
+					}
+					else if (message_id == (ushort)ProtocolIdentifiers.CAPABILITY_RESPONSE_ID)
+					{
+						tmp_b_len = BitConverter.ToUInt16(recv_b, index);
+						tmp_b = new byte[tmp_b_len];
+						Array.Copy(recv_b, index, tmp_b, 0, tmp_b_len);
+						ProcessCapabilityData(tmp_b);
+						receivedCapabilityResponse = true;
+						index += tmp_b_len;
+					}
+					else if (message_id == (ushort)ProtocolIdentifiers.DATA_RESPONSE_ID) {
+						tmp_b_len = BitConverter.ToUInt16(recv_b, index);
+						tmp_b = new byte[tmp_b_len];
+						Array.Copy(recv_b, index, tmp_b, 0, tmp_b_len);
+						//ProcessDataResponse(tmp_b);
+						ProcessAsRRCommand(tmp_b);
+						index += tmp_b_len;
+					}
+					// debug
+					//Console.WriteLine(string.Format("recv common: {0}, recv synctime {1}, recv capab {2}", receivedCommonNameResponse, receivedSyncTimeResponse, receivedCapabilityResponse));
+					if (receivedCommonNameResponse && receivedSyncTimeResponse && receivedCapabilityResponse)
+					{
+						receivedProtocolSetupResponse = true;
+					}
+				}
+				recv_b = null;
+			}
+			//Console.WriteLine(string.Format("sent protocol request {0}, recv proto resp {1}", sentProtocolSetupRequest, receivedProtocolSetupResponse));
+			// if (!sentProtocolSetupRequest || !receivedProtocolSetupResponse)
+			// {
+			// 	if ((!sentProtocolSetupRequest) || (sentProtocolSetupRequest && (DateTime.Now.Subtract(time_sent).TotalSeconds >= TIMEOUT_SECS)))
+			// 	{
+
+			// 		ushort pkt_len1 = ProtocolMessagesG3PLC.CommonNameRequestPacketLen();
+			// 		ushort pkt_len2 = ProtocolMessagesG3PLC.SyncTimeRequestPacketLen();
+			// 		ushort pkt_len3 = ProtocolMessagesG3PLC.CapabilityRequestPacketLen();
+			// 		ushort combo_pkt_len = (ushort)(pkt_len1 + pkt_len2 + pkt_len3+2);
+			// 		byte[] combo_pkt = new byte[combo_pkt_len];
+
+			// 		byte[] pkt1 = new byte[pkt_len1];
+			// 		ProtocolMessagesG3PLC.CommonNameRequestPacket(pkt1, pkt_len1);
+			// 		ushort tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, false, pkt1, pkt_len1);
+
+			// 		byte[] pkt2 = new byte[pkt_len2];
+			// 		byte[] time_b;
+			// 		StringBuilder sb = new StringBuilder();
+			// 		DateTime curr_time = DateTime.Now;
+			// 		sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Month, curr_time.Day, curr_time.Year - 2000));
+			// 		sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Hour, curr_time.Minute, curr_time.Second));
+			// 		time_b = ASCIIEncoding.ASCII.GetBytes(sb.ToString());
+			// 		ProtocolMessagesG3PLC.SyncTimeRequestPacket(pkt2, pkt_len2, time_b, (ushort)time_b.Length);
+			// 		tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, true, pkt2, pkt_len2);
+
+			// 		byte[] pkt3 = new byte[pkt_len3];
+			// 		ProtocolMessagesG3PLC.CapabilityRequestPacket(pkt3, pkt_len3);
+			// 		tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, true, pkt3, pkt_len3);
+					
+			// 		TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+			// 		time_sent = DateTime.Now;
+			// 		sentProtocolSetupRequest = true;
+			// 		startCounting(TIMEOUT_SECS + rnd_node.Next(-15, 15)); // ADD A RANDOM plus or minus 15 SECS DELAY
+			// 	}
+			// }
+			// else if (receivedProtocolSetupResponse)
+			// {
+			// 	// goto next state
+			// 	StateMachineNextState("RECEIVED_PROTOCOLSETUP_RESPONSE");
+			// }
+			if (receivedProtocolSetupResponse)
+			{
+				// goto next state
+				StateMachineNextState("RECEIVED_PROTOCOLSETUP_RESPONSE");
+			}
+		}
+
+
+		private void CommReadyTask()
+		{
+			int recv_idx;
+			ushort message_id;
+			int message_len;
+			// if asked to shutdown go to the shutdown state
+			if (shutdownRequest)
+			{
+				StateMachineNextState("SHUTDOWN");
+				recv_b = null;
+				return;
+			}
+			//Console.WriteLine("start of comm ready task");
+			if (recv_b != null)
+			{
+				recv_idx = 2;
+				while (recv_idx < recv_b.Length)
+				{
+					message_len = BitConverter.ToUInt16(recv_b, recv_idx);
+					message_id = BitConverter.ToUInt16(recv_b, recv_idx+2);
+					// debug
+					//Console.WriteLine(string.Format("idx {0}, total len {1}, message len {2}, message id {3}", recv_idx, recv_b.Length, message_len, message_id));
+					byte[] tmp_pkt = new byte[message_len];
+					Array.Copy(recv_b, recv_idx, tmp_pkt, 0, message_len);
+					recv_idx += message_len;
+					if (message_id == (ushort)ProtocolIdentifiers.DATA_RESPONSE_ID)
+					{
+						ProcessAsRRCommand(tmp_pkt);
+						//ProcessDataResponse(tmp_pkt);
+						tmp_pkt = null;
+					}
+					else if (message_id == (ushort)ProtocolIdentifiers.COMMAND_RESPONSE_ID)
+					{
+						ProcessCommandResponse(tmp_pkt);
+						tmp_pkt = null;
+					}
+					else if (message_id == (ushort) ProtocolIdentifiers.BRIDGENODE_DATA_RESPONSE_ID)
+					{
+						ProcessBridgeNodeDataResponse(tmp_pkt);
+						tmp_pkt = null;
+					}
+					else if (message_id == (ushort) ProtocolIdentifiers.BRIDGENODE_COMMAND_RESPONSE_ID)
+					{
+						ProcessBridgeNodeDataResponse(tmp_pkt);
+						tmp_pkt = null;
+					}
+					else if (message_id == (ushort) ProtocolIdentifiers.RS232_RESPONSE_ID )
+					{
+						ProcessAsRRCommand(tmp_pkt);
+						//ProcessRs232Response(tmp_pkt);
+						tmp_pkt = null;
+					} 
+					else
+					{
+						ProcessGenericResponse(tmp_pkt);
+						tmp_pkt = null;
+					}
+				}
+			}
+			//Console.WriteLine("END of comm ready task");
+		}
+
+		private void ProcessReceivedMessage(object[] msg_recv)
+		{
+			//byte[] msg_bytes = null;
+			//ushort tmpu16;
+			if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is G3.DataTransferIndication) )
+			{
+				// processs data 
+				//Console.WriteLine("callling recv autoreset set ");
+				G3.DataTransferIndication dti = (G3.DataTransferIndication)msg_recv[1];
+				link_qti = (int)dti.link_quality; // this will be appended when sending data to GUI
+				//Console.WriteLine(dti.ToString());
+			// 	if ( (dti.data_recv[2+2] == 0x04) && (dti.data_recv[3+2] == 0x00) ) // +2 for addition for packaged messages
+			// 	{
+			// 		// need to add link quality indicator to message bytes ( 2 bytes for link quality id, and 2 bytes for teh value)
+			// 		msg_bytes = new byte[dti.data_recv.Length + 4]; // for link quality indication (current reproted values in range 0x00-0xFF but using uint16 for future upgrades)
+			// 		// it is data response, only then modify the capability
+			// 		Array.Copy(dti.data_recv, msg_bytes, dti.data_recv.Length);
+			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,0); // msg size at combined packet
+			// 		tmpu16 += 4;
+			// 		byte[] tmpb = BitConverter.GetBytes(tmpu16);
+			// 		msg_bytes[0] = tmpb[0];
+			// 		msg_bytes[1] = tmpb[1];
+			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,2); // msg szie of first packet 
+			// 		tmpu16 += 4;
+			// 		byte[] tmpb2 = BitConverter.GetBytes(tmpu16);
+			// 		msg_bytes[2] = tmpb2[0];
+			// 		msg_bytes[3] = tmpb2[1];
+			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,4+2); // number of capability ids in message
+			// 		tmpu16 += 1;
+			// 		tmpb = BitConverter.GetBytes(tmpu16);
+			// 		msg_bytes[4+2] = tmpb[0];
+			// 		msg_bytes[5+2] = tmpb[1];
+			// 		// little endian format
+			// 		msg_bytes[dti.data_recv.Length] = (byte)( (ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0x00FF );
+			// 		msg_bytes[dti.data_recv.Length+1] = (byte)( ((ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0xFF00) >> 8 );
+			// 		msg_bytes[dti.data_recv.Length+2] = dti.link_quality;
+			// 		msg_bytes[dti.data_recv.Length+3] = 0x00;
+			// 		//Console.WriteLine("finished modifying recv message data confirmation");
+			// 	}
+			// 	else 
+			// 	{
+			// 		msg_bytes = new byte[dti.data_recv.Length];
+			// 		Array.Copy(dti.data_recv, msg_bytes, dti.data_recv.Length);
+			// 	}
+
+				if (dti.data_recv == null)
+				{
+					return;
+				}
+				// require a minimum of 6 bytes to process
+				if (dti.data_recv.Length < 5)
+				{
+					// TODO: send message to console that INVALID DATA is received
+					return;
+				}
+				receive_id = BitConverter.ToUInt16(dti.data_recv, 2+2);	
+				Console.WriteLine(string.Format("tx id {0}, rx id {1}", transmit_id, receive_id));
+				if ( ((transmit_id+1) == receive_id) || 
+					 (transmit_id == ProtocolMessagesG3PLC.DATA_REQUEST_ID  && receive_id == ProtocolMessagesG3PLC.BRIDGENODE_DATA_RESPONSE_ID) ||
+					 (transmit_id == ProtocolMessagesG3PLC.COMMAND_REQUEST_ID && receive_id == ProtocolMessagesG3PLC.DATA_RESPONSE_ID) ||
+					 (transmit_id == ProtocolMessagesG3PLC.COMMAND_REQUEST_ID && receive_id == ProtocolMessagesG3PLC.BRIDGENODE_DATA_RESPONSE_ID)
+				   )
+				{
+					lock(_tx_rx_lock)
+					{
+						_tx_rx_resp = true;
+					}
+				}
+				// copy data to recv global buffer
+				recv_b = new byte[dti.data_recv.Length];
+				if (_data_cmd_done)
+				{
+					if (_number_async_messages > 0)
+					{
+						_number_async_messages--;
+					}
+				}
+				Array.Copy(dti.data_recv, recv_b, dti.data_recv.Length);
+				//Console.WriteLine("SM: Process Recv Message State machine");
+				CheckExecuteStateMachine(true);
+				resp_recv_event.Set();
+			}
+			else if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is G3.DataTransferConfirm) )
+			{
+
+				// if status is error, then call 
+				G3.DataTransferConfirm dtc = (G3.DataTransferConfirm) msg_recv[1];
+				Console.WriteLine(dtc.ToString());
+				confirmation_recv_event.Set();
+				if (dtc.status != 0x0000)
+				{
+					// an error occured, so relese the wait event, as we may not get a response
+					resp_recv_event.Set();
+					_exit_mode = true;
+				}
+			}
+		}
+
+
+		private void ProcessCommonNameData(byte[] msg_bytes)
+		{
+			ushort common_name_len = BitConverter.ToUInt16(msg_bytes, 4);
+			string tmpstr = System.Text.Encoding.UTF8.GetString(msg_bytes, 6, common_name_len);
+			string[] tmp_parts = tmpstr.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+			_common_name = tmp_parts[0];
+			if (tmp_parts.Length > 1)
+			{
+				_serial_num = tmp_parts[1];
+			}
+		}
+
+		private void ProcessCapabilityData(byte[] msg_bytes)
+		{
+			// debug
+			Console.WriteLine("Skip Sending capability data to ui");
+			//SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+			uint capability_len = BitConverter.ToUInt16(msg_bytes, 4);
+			_capability = new ushort[capability_len];
+			for (int ii = 0; ii < capability_len; ii++)
+			{
+				_capability[ii] = BitConverter.ToUInt16(msg_bytes, 6 + (ii * 2));
+			}
+		}
+
+		private void ProcessAsRRCommand(byte[] msg_bytes)
+		{
+			if (curr_rr_cmd != null)
+			{
+				List<ResponseData> list_rd = DeviceData.ComputeValues(curr_rr_cmd.device_name, curr_rr_cmd.command_name, msg_bytes);
+				if (list_rd != null)
+				{
+					foreach(var tmp_rd in list_rd)
+					{
+						Console.WriteLine(tmp_rd.ToString());
+					}
+				}
+
+				if (curr_rr_cmd.command_type.Equals("init"))
+				{
+					initialized.AddOrUpdate(curr_rr_cmd.uuid, true, (key, oldvalue) => oldvalue);
+				}
+				else if (curr_rr_cmd.command_type.Equals("config") )
+				{
+					configured.AddOrUpdate(curr_rr_cmd.uuid, true, (key , oldvalue) => oldvalue);
+					//Console.WriteLine(string.Format("updated status of configured {0}", configured[curr_rr_cmd.uuid]));
+					//Console.WriteLine(configured[curr_rr_cmd.uuid]);
+				}
+				curr_rr_cmd = null;
+			}
+			SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+		}
+		private void ProcessRs232Response(byte[] msg_bytes)
+		{
+			if (send_to_cloud)
+			{
+				if (curr_rr_cmd != null)
+				{
+                    //Console.WriteLine(string.Format("Processing cmd -> {0}", curr_rr_cmd.command_type));
+					List<SensorData> to_upload_d = null;
+					string dev_name = _common_name + "-" + _serial_num;
+					if (curr_rr_cmd.command_name.Equals("Get Weather Data"))
+					{
+						to_upload_d = PushProcessing.GetWeatherData(msg_bytes, curr_rr_cmd);
+					} 
+					else if (curr_rr_cmd.command_name.Equals("Get PM2.5 Data")) 
+					{
+						to_upload_d = PushProcessing.GetPM2_5Data(msg_bytes, curr_rr_cmd);
+					}
+					if (curr_rr_cmd.command_type.Equals("init"))
+					{
+						initialized.AddOrUpdate(curr_rr_cmd.uuid, true, (key, oldvalue) => oldvalue);
+					}
+					else if (curr_rr_cmd.command_type.Equals("config") )
+					{
+						configured.AddOrUpdate(curr_rr_cmd.uuid, true, (key , oldvalue) => oldvalue);
+                    //Console.WriteLine(string.Format("updated status of configured {0}", configured[curr_rr_cmd.uuid]));
+                    //Console.WriteLine(configured[curr_rr_cmd.uuid]);
+					}
+					curr_rr_cmd = null;
+					// push to cloud server
+					if ( to_upload_d != null )
+					{
+						Task.Run(() => Communications.AzurePushCommunications.transmit(to_upload_d));
+					}
+				}
+				else 
+				{
+					Console.WriteLine("null json command, cannot interpret data");
+					SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+				}
+			}
+			else 
+			{
+				if (curr_rr_cmd != null)
+				{
+					List<ResponseData> list_rd = DeviceData.ComputeValues(curr_rr_cmd.device_name, curr_rr_cmd.command_name, msg_bytes);
+					if (list_rd != null)
+					{
+						foreach(var tmp_rd in list_rd)
+						{
+							Console.WriteLine(tmp_rd.ToString());
+						}
+					}
+
+					if (curr_rr_cmd.command_type.Equals("init"))
+					{
+						initialized.AddOrUpdate(curr_rr_cmd.uuid, true, (key, oldvalue) => oldvalue);
+					}
+					else if (curr_rr_cmd.command_type.Equals("config") )
+					{
+						configured.AddOrUpdate(curr_rr_cmd.uuid, true, (key , oldvalue) => oldvalue);
+                    //Console.WriteLine(string.Format("updated status of configured {0}", configured[curr_rr_cmd.uuid]));
+                    //Console.WriteLine(configured[curr_rr_cmd.uuid]);
+					}
+					curr_rr_cmd = null;
+
+				}
+				SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+			}
+		}
+
+		private void ProcessDataResponse(byte[] msg_bytes)
+		{
+			UInt16 tmpu16;
+			byte [] mod_bytes;
+			Console.WriteLine(string.Format("Sending Data response to ui; length = {0}", msg_bytes.Length));
+			if (link_qti > 0)
+			{
+				// need to add link quality indicator to message bytes ( 2 bytes for link quality id, and 2 bytes for teh value)
+				mod_bytes = new byte[msg_bytes.Length + 4]; // for link quality indication (current reproted values in range 0x00-0xFF but using uint16 for future upgrades)
+				// it is data response, only then modify the capability
+				Array.Copy(msg_bytes, mod_bytes, msg_bytes.Length);
+				tmpu16 = BitConverter.ToUInt16(msg_bytes,0); // msg szie of first packet 
+				tmpu16 += 4;
+				byte[] tmpb2 = BitConverter.GetBytes(tmpu16);
+				mod_bytes[0] = tmpb2[0];
+				mod_bytes[1] = tmpb2[1];
+				tmpu16 = BitConverter.ToUInt16(msg_bytes,4); // number of capability ids in message
+				tmpu16 += 1;
+				byte[] tmpb = BitConverter.GetBytes(tmpu16);
+				mod_bytes[4] = tmpb[0];
+				mod_bytes[5] = tmpb[1];
+				// little endian format
+				mod_bytes[msg_bytes.Length] = (byte)( (ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0x00FF );
+				mod_bytes[msg_bytes.Length+1] = (byte)( ((ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0xFF00) >> 8 );
+				mod_bytes[msg_bytes.Length+2] = (byte)link_qti;
+				link_qti = -1;
+				mod_bytes[msg_bytes.Length+3] = 0x00;
+				//Console.WriteLine("finished modifying recv message data confirmation");
+				SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, mod_bytes);
+			}
+			else 
+			{
+				SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+			}
+
+		}
+
+		private void ProcessBridgeNodeDataResponse(byte[] msg_bytes)
+		{
+			UInt16 tmpu16_1;
+			byte [] mod_bytes;
+			
+			Console.WriteLine(string.Format("Sending Data response to ui; length = {0}", msg_bytes.Length));
+			tmpu16_1 = BitConverter.ToUInt16(msg_bytes, 0); // total len of msg_bytes
+			mod_bytes = new byte[tmpu16_1-2];
+			System.Array.Copy(msg_bytes, 2, mod_bytes, 0, tmpu16_1-2 );
+			SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+
+		}
+
+
+
+		private void ProcessCommandResponse(byte[] msg_bytes)
+		{
+			SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+			// TODO: is the rest of teh code necessary for dc in beagle bone; to check?
+
+			// int num_status = BitConverter.ToUInt16(msg_bytes, 4);
+			// ushort data_index = 6;
+			// StringBuilder sb = new StringBuilder();
+			// for (int ii = 0; ii < num_status; ii++)
+			// {
+			// 	ushort cmd_id = BitConverter.ToUInt16(msg_bytes, data_index);
+			// 	data_index += 2;
+			// 	//sb.AppendFormat("[{0}] : {1},  ", id_name[cmd_id].Replace("CPB_", ""), msg_bytes[data_index]);
+			// 	sb.AppendFormat("[{0}] : {1},  ", ServiceNode.GetCapabilityName(cmd_id), ServiceNode.GetStatusAsString(msg_bytes[data_index]));
+			// 	data_index++;
+			// }
+			// this._props.ServiceNodeStatus = sb.ToString().Trim();
+		}
+
+		private void ProcessGenericResponse(byte[] msg_bytes)
+		{
+			SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
+		}
+		
+		
+		#endregion // state_machine
+
+		#region timer_funcs
+		private void startCounting(int seconds)
+		{
+			timer_count = 0;
+			required_timer_count = (int)((seconds * 1000) / timer_interval);
+			required_timer_count++;
+			if (timer_started)
+			{
+				return;
+			}
+			main_timer.Elapsed += this.OnTimerElapsed;
+			timer_started = true;
+		}
+
+		private void stopCounting()
+		{
+			main_timer.Elapsed -= this.OnTimerElapsed;
+			timer_started = false;
+		}
+
+		private void OnTimerElapsed(object source, ElapsedEventArgs e)
+		{
+			timer_count++;
+			if (timer_count >= required_timer_count)
+			{
+				stopCounting();
+				//Console.WriteLine("SM: On Timer elapsed State machine");
+				Task.Run(
+					() => CheckExecuteStateMachine(false)
+				);
+			}
+		}
+
+		#endregion //timer_funcs
+
+		#region interface_funcs
+		public void Shutdown()
+		{
+			confirmation_recv_event.Set();
+			resp_recv_event.Set();
+
+			shutdownRequest = true;
+			//Console.WriteLine("SM: Shutdown req State machine");
+
+			StateMachine();
+			msg_recv.Cancel();
+			if (this.Props != null)
+			{
+				this.Props.ServiceNodeStatus = string.Format("Shutdown for node {0} called at {1} \n Cannot perform any more communications.",
+					_node_ipv6addr_str,
+					DateTime.Now.ToShortTimeString());
+			}
+
+		}
+
+		public void PutMessage(object[] msg_obj)
+		{
+			Task.Run(
+				() =>
+				{
+					// debug
+					//Console.WriteLine("in Put message: recv msg_obj");
+					ProcessReceivedMessage(msg_obj);
+				}
+			);
+		}
+
+		public void SendDetachMessage()
+		{
+			_host_messaging.SendDetachRequest(_extended_addr);
+		}
+
+		//private void messageReceived()
+		//{
+		//    object [] got_msg = _node_msg.Take(msg_recv.Token);
+		//    //return got_msg;
+		//    Task.Run(
+		//        () =>
+		//        {
+		//            ProcessReceivedMessage(got_msg);
+		//        }
+		//    );
+
+		//}
+
+		private bool TransmitDataToNode(byte[] pkt, byte[] _node_ipv6addr, bool isUDP)
+		{
+			transmit_id = BitConverter.ToUInt16(pkt, 2+2);
+			Console.WriteLine(string.Format("tx id {0}", transmit_id));
+			//return _host_messaging.SendDataToNode(pkt, _node_ipv6addr, true);			
+			return _host_messaging.SendDataToNode(pkt, HostApp.CoordinatorIPv6Address, _node_ipv6addr, true);
+		}
+
+		#endregion // interface_funcs
+
+		#region Inotifypropertychanged impl
+		//private void NotifyPropertyChanged(String info)
+		//{
+		//    if (PropertyChanged != null)
+		//    {
+		//        PropertyChanged(this, new PropertyChangedEventArgs(info));
+		//    }
+		//}
+		#endregion // Inotifypropertychanged impl
+
+		#region update_funcs
+		public bool SetLoadOnOff(bool control)
+		{
+			// if control is true, then turn load on => value is 1
+			// if control is false, then turn load off => value is 0
+
+			//TODO: Send Command turnonoff with value based on control
+			int index = Array.IndexOf(NODE_CAPABILITY_NAMES, "CPB_ONOFF");
+			if (index < 0)
+			{
+				return false;
+			}
+			if (_capability.Contains(NODE_CAPABILITY_IDS[index]))
+			{
+				ushort[] cmd_ids = new ushort[1];
+				cmd_ids[0] = NODE_CAPABILITY_IDS[index];
+				ushort pkt_len = ProtocolMessagesG3PLC.CommandRequestPacketLen(cmd_ids, (ushort)cmd_ids.Length);
+				byte[] pkt = new byte[pkt_len];
+				byte update_val;
+				if (control)
+				{
+					update_val = 1;
+				}
+				else
+				{
+					update_val = 0;
+				}
+				byte insert_at = ProtocolMessagesG3PLC.CommandRequestPacketInit(pkt, pkt_len);
+				//var update_val_handle = GCHandle.Alloc(update_val, GCHandleType.Pinned);
+				//var update_val_ptr = update_val_handle.AddrOfPinnedObject();
+				insert_at = ProtocolMessagesG3PLC.CommandRequestPacketAppend(pkt, pkt_len, insert_at, cmd_ids[0], BitConverter.GetBytes(update_val));
+				byte[] combo_pkt = new byte[pkt_len+2];
+				ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len + 2), false, pkt, (ushort)pkt.Length);
+				//update_val_handle.Free();
+				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+				if (control)
+				{
+					this._props.ServiceNodeStatus = "Sent Turn ON Command to Node";
+				}
+				else
+				{
+					this._props.ServiceNodeStatus = "Sent Turn OFF Command to Node";
+				}
+				return true;
+			}
+			else
+			{
+				// this node not contain on off capability
+				return false;
+			}
+
+		}
+
+		public bool SetLogging(bool control)
+		{
+			// if control is true, then turn logging on 
+			// if control is false, then turn logging off 
+
+			if (control)
+			{
+				if (this._do_log != true)
+				{
+					this._do_log = true;
+					//this._log_btn_txt = "Disable Logging";
+					this.Props.LogBtnTxt = "Disable Logging";
+					this._props.ServiceNodeStatus = "Logging Turned ON";
+				}
+				// else it is already logging ignore command
+			}
+			else
+			{
+				if (this._do_log != false)
+				{
+					this._do_log = false;
+					//this._log_btn_txt = "Enable Logging";
+					this.Props.LogBtnTxt = "Enable Logging";
+					this._props.ServiceNodeStatus = "Logging Turned OFF";
+				}
+				// else logging is stopped no need to repeat it again
+			}
+			return true;
+
+		}
+
+		public bool SetReportInterval(string rep_int_str)
+		{
+			//TODO: Send Command turnonoff with value based on control
+			int index = Array.IndexOf(NODE_CAPABILITY_NAMES, "CPB_REPORT_INTERVAL");
+			if (index < 0)
+			{
+				return false;
+			}
+			uint report_interval_value;
+			bool succ = uint.TryParse(rep_int_str, out report_interval_value);
+			if (!succ)
+			{
+				this._props.ServiceNodeStatus = string.Format("Failed to parse reporting interval {0}", rep_int_str);
+				return false;
+			}
+
+			if (_capability.Contains(NODE_CAPABILITY_IDS[index]))
+			{
+				ushort[] cmd_ids = new ushort[1];
+				cmd_ids[0] = NODE_CAPABILITY_IDS[index];
+				ushort pkt_len = ProtocolMessagesG3PLC.CommandRequestPacketLen(cmd_ids, (ushort)cmd_ids.Length);
+				byte[] pkt = new byte[pkt_len];
+				byte insert_at = ProtocolMessagesG3PLC.CommandRequestPacketInit(pkt, pkt_len);
+				//var report_interval_handle = GCHandle.Alloc(report_interval_value, GCHandleType.Pinned);
+				//var report_interval_ptr = report_interval_handle.AddrOfPinnedObject();
+				insert_at = ProtocolMessagesG3PLC.CommandRequestPacketAppend(pkt, pkt_len, insert_at, cmd_ids[0], BitConverter.GetBytes(report_interval_value));
+				//report_interval_handle.Free();
+				byte[] combo_pkt = new byte[pkt_len+2];
+				ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len + 2), false, pkt, (ushort)pkt_len);
+				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+				return true;
+			}
+			else
+			{
+				// this node not contain on off capability
+				return false;
+			}
+
+		}
+
+		public bool SetBrightnessLevel(string intensity_str)
+		{
+			//TODO: Send Command intensity with value in parameter
+			int index = Array.IndexOf(NODE_CAPABILITY_NAMES, "CPB_INTENSITY");
+			if (index < 0)
+			{
+				return false;
+			}
+			ushort new_intensity_value;
+			bool succ = ushort.TryParse(intensity_str, out new_intensity_value);
+			if (!succ)
+			{
+				this._props.ServiceNodeStatus = string.Format("Failed to parse brightness value {0}", intensity_str);
+				return false;
+			}
+
+			if (new_intensity_value < 10)
+			{
+				new_intensity_value = 10;
+				this._props.ServiceNodeStatus = string.Format("Lowest brightness % value is 10, using lower limit, value set was {0}", intensity_str);
+			}
+
+			if (new_intensity_value > 100)
+			{
+				new_intensity_value = 100;
+				this._props.ServiceNodeStatus = string.Format("Highest brightness % value is 100, using upper limit, value set was {0}", intensity_str);
+			}
+
+
+			if (_capability.Contains(NODE_CAPABILITY_IDS[index]))
+			{
+				ushort[] cmd_ids = new ushort[1];
+				cmd_ids[0] = NODE_CAPABILITY_IDS[index];
+				ushort pkt_len = ProtocolMessagesG3PLC.CommandRequestPacketLen(cmd_ids, (ushort)cmd_ids.Length);
+				byte[] pkt = new byte[pkt_len];
+				byte insert_at = ProtocolMessagesG3PLC.CommandRequestPacketInit(pkt, pkt_len);
+				//var report_interval_handle = GCHandle.Alloc(new_intensity_value, GCHandleType.Pinned);
+				//var report_interval_ptr = report_interval_handle.AddrOfPinnedObject();
+				insert_at = ProtocolMessagesG3PLC.CommandRequestPacketAppend(pkt, pkt_len, insert_at, cmd_ids[0], BitConverter.GetBytes(new_intensity_value));
+				//report_interval_handle.Free();
+				byte[] combo_pkt = new byte[pkt_len + 2];
+				ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len + 2), false, pkt, (ushort)pkt_len);
+				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+				return true;
+			}
+			else
+			{
+				// this node not contain on off capability
+				return false;
+			}
+
+		}
+
+		public bool SetSchedule(DateTime[] sch_times, byte[] sch_intensity_pc)
+		{
+			// assumed that the data in sch_times is all ordered. this simply sends the data to the node
+			string tmpstr;
+			if (_current_state >= (ushort)ServiceNodeStates.CAPABILITY)
+			{
+				// schedule can be sent
+				// convert schedule to an array
+				if (sch_times.Length != sch_intensity_pc.Length)
+				{
+					return false;
+				}
+				else
+				{
+					byte[] sch_row_bytes = new byte[sch_times.Length * 7];
+					int jj = 0;
+					for (int ii = 0; ii < sch_times.Length; ii++)
+					{
+						tmpstr = sch_times[ii].ToString("HH:mm:ss").Replace(":", "");
+						byte[] tmpb = ASCIIEncoding.ASCII.GetBytes(tmpstr);
+						Array.Copy(tmpb, 0, sch_row_bytes, jj, tmpb.Length);
+						jj += 6;
+						sch_row_bytes[jj] = sch_intensity_pc[ii];
+						jj += 1;
+					}
+					ushort pkt_len = ProtocolMessagesG3PLC.ScheduleCommandPacketLen((ushort)sch_times.Length);
+					byte[] pkt = new byte[pkt_len];
+					ProtocolMessagesG3PLC.ScheduleCommandPacket(pkt, pkt_len, sch_row_bytes, (ushort)sch_row_bytes.Length, (ushort)sch_times.Length);
+					byte[] combo_pkt = new byte[pkt_len + 2];
+					ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len+2), false, pkt, (ushort)pkt_len);
+					TransmitDataToNode(pkt, _node_ipv6addr, true);
+					return true;
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		public int NumberOfCommands()
+		{
+			string node_cmd_filename = _common_name + "-" + _serial_num + ".json";
+			string node_fname = System.IO.Path.Combine("NodesInfo", node_cmd_filename);
+			int number_of_commands = 0;
+			RRCommand rr_cmd;
+			// clear concurrent queue; it should be empty
+			if (!sn_rr_queue.IsEmpty)
+			{
+				while (sn_rr_queue.TryDequeue(out rr_cmd));
+			}
+
+			if (node_devices == null )
+			{
+				if (System.IO.File.Exists(node_fname))
+				{
+					string json_str = System.IO.File.ReadAllText(node_fname);
+					try
+					{
+						NodeDevices ndevs = JsonSerializer.Deserialize<NodeDevices>(json_str);
+						//NodeDevices ndevs = JsonConvert.DeserializeObject<NodeDevices>(json_str);
+						node_devices = ndevs;
+					}
+					catch (System.Exception e)
+					{
+						Console.WriteLine(e.Message);
+						node_devices = null;
+					}
+				}
+				else
+				{
+					node_devices = null;
+				}
+			}
+			else
+			{
+				// TODO: has it changed? how to do it and udpate commands
+			}
+
+			if ( node_devices != null ) 
+			{
+				foreach (DeviceInfo di in node_devices.devices)
+				{
+					if ( di.config_command.Length != 0 )
+					{
+                        //Console.WriteLine(string.Format("uuid {0}, exits in configure {1}", di.uuid, configured.ContainsKey(di.uuid)));
+                        //if (configured.ContainsKey(di.uuid))
+                        //{
+                            //Console.WriteLine(configured[di.uuid]);
+                        //}
+						if ( 
+							( ( configured.ContainsKey(di.uuid) ) &&  ( configured[di.uuid] == false ) ) ||
+							( !configured.ContainsKey(di.uuid) )
+						)
+						{
+							RRCommand tmp_rr_cmd = new RRCommand();
+							tmp_rr_cmd.uuid = di.uuid;
+							tmp_rr_cmd.device_name = di.device;
+							tmp_rr_cmd.command_name = di.config_command;
+							tmp_rr_cmd.command_type = "config";
+							configured.AddOrUpdate(di.device, false, (key, oldvalue) => oldvalue);
+							sn_rr_queue.Enqueue(tmp_rr_cmd);
+						}
+					}
+
+					if ( di.init_command.Length != 0 )
+					{
+
+
+                        //Console.WriteLine(string.Format("uuid {0}, exits in configure {1}", di.uuid, initialized.ContainsKey(di.uuid)));
+                        //if (initialized.ContainsKey(di.uuid))
+                        //{
+                        //     Console.WriteLine(initialized[di.uuid]);
+                        //}
+						if ( 
+							( ( initialized.ContainsKey(di.uuid) ) &&  ( initialized[di.uuid] == false ) ) ||
+							( !initialized.ContainsKey(di.uuid) )
+						)
+						{
+							RRCommand tmp_rr_cmd = new RRCommand();
+							tmp_rr_cmd.uuid = di.uuid;
+							tmp_rr_cmd.device_name = di.device;
+							tmp_rr_cmd.command_name = di.init_command;
+							tmp_rr_cmd.command_type = "init";
+							initialized.AddOrUpdate(di.device, true, (key, oldvalue) => oldvalue);
+							sn_rr_queue.Enqueue(tmp_rr_cmd);
+						}
+					}
+
+					// ignore order for now
+					foreach ( DataCommand dc in di.data_commands )
+					{
+						RRCommand tmp_rr_cmd = new RRCommand();
+						tmp_rr_cmd.uuid = di.uuid;
+						tmp_rr_cmd.device_name = di.device;
+						tmp_rr_cmd.command_name = dc.name;
+						tmp_rr_cmd.command_type = "data";
+						sn_rr_queue.Enqueue(tmp_rr_cmd);
+					}
+
+				}
+				return sn_rr_queue.Count;				
+			}
+			else
+			{
+				return 1;
+			}
+		}
+
+		public void SendCommandWithTimeout(int command_index)
+		{
+			if (node_devices == null) 
+			{
+				curr_rr_cmd = null;
+				SendDCRequestEventWithTimeout("data", null);
+			}
+			else
+			{
+				RRCommand to_send_rrcmd;
+				bool sts;
+				sts = sn_rr_queue.TryDequeue(out to_send_rrcmd);
+                //Console.WriteLine(string.Format("SENDING COMMAND = > {0}", to_send_rrcmd.command_name));
+				if (sts)
+				{
+					curr_rr_cmd = to_send_rrcmd;
+					SendDCRequestEventWithTimeout(DeviceData.GetChannelNameForDevice(to_send_rrcmd.device_name),
+						to_send_rrcmd);
+				}
+			}
+		}
+
+		public bool SendDCRequestEventWithTimeout(string req_type, RRCommand send_rr_cmd)
+		{
+			bool sts;
+			ushort pkt_len = 0;
+			byte[] pkt = null;
+			byte[] combo_pkt = null;
+
+			if (req_type.ToLower().Equals("core") )
+			{
+				if (send_rr_cmd.command_name.Equals("GetPowerData"))
+				{
+					pkt_len = ProtocolMessagesG3PLC.DataRequestPacketLen();
+					pkt = new byte[pkt_len];
+					combo_pkt = new byte[pkt_len + 2];
+					ProtocolMessagesG3PLC.DataRequestPacket(pkt, pkt_len);
+					ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len+2), false, pkt, pkt_len);
+				}
+				else 
+				{
+					Console.WriteLine(string.Format("Invalid command recv Channel: {0}, CmdName: {1}", req_type, send_rr_cmd.command_name));
+				}
+			}
+			else if (req_type.ToLower().Equals("rs232") )
+			{
+				JsonGetCommand send_json_cmd = DeviceData.GetCommand(send_rr_cmd.device_name, send_rr_cmd.command_name);
+				// possible types: config, init, data
+				byte[] cmd_data = GetRs232CommandData(send_json_cmd);
+				pkt_len = ProtocolMessagesG3PLC.RS232CommandPacketLen(cmd_data);
+                pkt = new byte[pkt_len];
+                ProtocolMessagesG3PLC.RS232CommandPacket(pkt, pkt_len, cmd_data);
+				combo_pkt = new byte[pkt_len + 2];
+				combo_pkt[0] = (byte)(pkt_len+2);
+				combo_pkt[1] = (byte)((pkt_len+2) >> 8);
+				ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(pkt_len+2), false, pkt, pkt_len);
+			}
+
+
+			if (pkt_len == 0)
+			{
+				return false; // cannot do any furhter processing => probably invalid command
+			}
+			_data_cmd_time = DateTime.Now;
+			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			confirmation_recv_event.Reset();
+			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+			if (sts)
+			{
+				Console.WriteLine("Confirmation received. Wait for data request response");
+				resp_recv_event.Reset();
+				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			}
+			else 
+			{
+				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
+			}
+			return sts;
+		}
+
+		public byte[] GetRs232CommandData(JsonGetCommand send_json_cmd)
+		{
+			byte[] data_2_send = null;
+			if (send_json_cmd.send_type.Equals("string", StringComparison.CurrentCultureIgnoreCase))
+			{
+				if (send_json_cmd.name.ToLower().Equals("config"))
+				{
+					// parse the send command
+					// format "<speed>, <num bits>, <parity values: N [None], O[Odd], E[Even], <num stop bits>, delimiter byte, 0/1 (xon_xoff disable/enable)"
+					//For Parity N => 0,  E => 1, O => 2
+					string[] data_str = send_json_cmd.send_command.Split(',');
+					if (data_str.Length != 6)
+					{
+						System.Console.WriteLine(string.Format("expected config format \"baud rate, num bits, parity(N/E/O), stopbits,delimiter char as int, 0/1 (disable/enable SW flow control xon_xoff\", got {0}", 
+							send_json_cmd.send_command));
+						System.Console.WriteLine(string.Format("Cannot parse and send config commands"));
+						return null;
+					}
+					data_2_send = new byte[11];
+					// config uint8 =0, address_uint8, 
+					// Baud_uint32, parity_uint8, { 0 = none, 1 = even, 2 = odd }, 
+					//     numberOfBits_uint8, numberOfStopBits_uint8, delimiter _uint8 { 0x10 or 0x13 typically}
+					data_2_send[0] = 0; // it is config data
+					data_2_send[1] = 0; // address_uint8
+					byte[] tmpb = BitConverter.GetBytes( (Convert.ToUInt32(data_str[0])) );
+					data_2_send[2] = tmpb[0];
+					data_2_send[3] = tmpb[1];
+					data_2_send[4] = tmpb[2];
+					data_2_send[5] = tmpb[3];
+					if (data_str[1].ToLower().StartsWith("n")) // parity
+					{
+						data_2_send[6] = 0;
+					}
+					else if (data_str[1].ToLower().StartsWith("e"))
+					{
+						data_2_send[6] = 1;
+					}
+					else if (data_str[1].ToLower().StartsWith("o"))
+					{
+						data_2_send[6] = 2;
+					}
+					else
+					{
+						// invalid parity setting
+						System.Console.WriteLine("Invalid parity setting, expected N,E or O");
+						return null;
+					}
+					data_2_send[7] = Convert.ToByte(data_str[2]); // num bits
+					data_2_send[8] = Convert.ToByte(data_str[3]); // num stop bits
+					data_2_send[9] = Convert.ToByte(data_str[4]); // delimiter
+					data_2_send[10] = Convert.ToByte(data_str[5]); // enable / disable software flow control
+				}
+				else
+				{
+					//byte[] tmpb = System.Text.Encoding.ASCII.GetBytes(dev_rs232_cmds.commands[index].send_command);
+					MemoryStream ms = new MemoryStream();
+					foreach (char tmpch in send_json_cmd.send_command)
+					{
+						ms.WriteByte((byte)tmpch);
+					}
+					byte[] tmpb = ms.ToArray();
+					data_2_send = new byte[tmpb.Length + 2];
+					data_2_send[0] = 1; // 0=> config, 1 => command
+					data_2_send[1] = 0; // addressa is always zero for rs232 commands
+					System.Array.Copy(tmpb, 0, data_2_send, 2, tmpb.Length);
+				}
+			}
+			else if (send_json_cmd.send_type.Equals("binary", StringComparison.CurrentCultureIgnoreCase))
+			{
+				byte[] tmpb = ParseBinaryCommand(send_json_cmd.send_command);
+				data_2_send = new byte[tmpb.Length + 2];
+				data_2_send[0] = 1; // 0=> config, 1 => command
+				data_2_send[1] = 0; // addressa is always zero for rs232 commands
+				System.Array.Copy(tmpb, 0, data_2_send, 2, tmpb.Length);
+			}
+			return data_2_send;
+		}
+
+        private byte[] ParseBinaryCommand(string bin_cmd_str)
+        {
+            byte[] to_ret = null;
+            int ii;
+            bool parse_sts;
+            byte tmpb;
+            string[] bytes_str = bin_cmd_str.Split(new char[] { ',' });
+            parse_sts = true;
+            if (bytes_str.Length > 0)
+            {
+                to_ret = new byte[bytes_str.Length];
+                ii = 0;
+                parse_sts = true;
+                while ((ii < bytes_str.Length) && (parse_sts))
+                {
+                    if ((bytes_str[ii].Trim().StartsWith("0x")) ||
+                         (bytes_str[ii].Trim().StartsWith("0X"))
+                        )
+                    {
+                        parse_sts = byte.TryParse(bytes_str[ii].Trim().Substring(2), System.Globalization.NumberStyles.HexNumber, null, out tmpb);
+                        if (parse_sts)
+                        {
+                            to_ret[ii] = tmpb;
+                        }
+                    }
+                    else
+                    {
+                        parse_sts = byte.TryParse(bytes_str[ii].Trim(), out tmpb);
+                        if (parse_sts)
+                        {
+                            to_ret[ii] = tmpb;
+                        }
+                    }
+                    ii++;
+                }
+            }
+            if (parse_sts)
+            {
+                return to_ret;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+		public bool SendProtocolSetupRequestEventWithTimeout()
+		{
+			bool sts;
+			if (_pause_state_machine == true)
+			{
+				_pause_state_machine = false;
+			}
+			if (_current_state != (ushort)ServiceNodeStates.PROTOCOL_SETUP)
+			{
+				_current_state = (ushort)ServiceNodeStates.PROTOCOL_SETUP;
+			}
+			ushort pkt_len1 = ProtocolMessagesG3PLC.CommonNameRequestPacketLen();
+			ushort pkt_len2 = ProtocolMessagesG3PLC.SyncTimeRequestPacketLen();
+			ushort pkt_len3 = ProtocolMessagesG3PLC.CapabilityRequestPacketLen();
+			ushort combo_pkt_len = (ushort)(pkt_len1 + pkt_len2 + pkt_len3+2);
+			byte[] combo_pkt = new byte[combo_pkt_len];
+
+			byte[] pkt1 = new byte[pkt_len1];
+			ProtocolMessagesG3PLC.CommonNameRequestPacket(pkt1, pkt_len1);
+			ushort tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, false, pkt1, pkt_len1);
+
+			byte[] pkt2 = new byte[pkt_len2];
+			byte[] time_b;
+			StringBuilder sb = new StringBuilder();
+			DateTime curr_time = DateTime.Now;
+			sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Month, curr_time.Day, curr_time.Year - 2000));
+			sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Hour, curr_time.Minute, curr_time.Second));
+			sb.Append(string.Format("{0:d2}", (int)curr_time.DayOfWeek ) );
+			time_b = ASCIIEncoding.ASCII.GetBytes(sb.ToString());
+			ProtocolMessagesG3PLC.SyncTimeRequestPacket(pkt2, pkt_len2, time_b, (ushort)time_b.Length);
+			tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, true, pkt2, pkt_len2);
+
+			byte[] pkt3 = new byte[pkt_len3];
+			ProtocolMessagesG3PLC.CapabilityRequestPacket(pkt3, pkt_len3);
+			tmpu2 = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, combo_pkt_len, true, pkt3, pkt_len3);
+			_data_cmd_time = DateTime.Now; // we get a data response with proto setup too; so it could also be considered a command
+
+			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			confirmation_recv_event.Reset();
+			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+			if (sts)
+			{
+				Console.WriteLine("Confirmation received. Wait for Protocol request response");
+				resp_recv_event.Reset();
+				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			}
+			else 
+			{
+				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs/1000));
+			}
+			return sts;
+		}
+
+		#endregion // update_funcs
+
+		#region ui_funcs
+		private void SendToUserInterface(byte[] ipv6_address, string common_name, string serial_num, byte[] data_to_send)
+		{
+			if (_itransmit_comms == null)
+			{
+				// cannot send any data to ui; display in console
+				Console.WriteLine(String.Format("ipv6 [{0}], name -> {1}, data ->{2}",
+					_node_ipv6addr_str,
+					common_name + ";" + serial_num,
+				                                BitConverter.ToString(data_to_send, 0, data_to_send.Length)));
+				return;
+			}
+
+			//Console.WriteLine("in SentToUserInterface function");
+			// data format: ipv6_address bytes, length => 2 bytes
+			//              common_name + ";" + serial_num (corresponding to length bytes)
+			//              length of data => 2 bytes, data (as per length specified in the prev 2 bytes)
+			try
+			{
+				int tmp_b_len = 2 + ASCIIEncoding.ASCII.GetByteCount(common_name) + // note 2 is for length of common_name and serial_number that follows
+								ASCIIEncoding.ASCII.GetByteCount(serial_num) + 1;// note: 1 is for ";" that separates common name and serial number
+				int data_b_len = ipv6_address.Length + tmp_b_len + data_to_send.Length; 
+				byte[] data_b = new byte[data_b_len];
+				System.Array.Copy(ipv6_address, 0, data_b, 0, ipv6_address.Length);
+				//Console.WriteLine("Finished copy ipv6 address");
+				data_b[ipv6_address.Length] = (byte)(tmp_b_len & 0xFF);
+				data_b[ipv6_address.Length + 1] = (byte)(tmp_b_len >> 8);
+				byte[] tmp_b = new byte[tmp_b_len];
+				tmp_b = ASCIIEncoding.ASCII.GetBytes(common_name + ';' + serial_num);
+				System.Array.Copy(tmp_b, 0, data_b, ipv6_address.Length + 2, tmp_b_len-2);
+				//Console.WriteLine("Finished copy common name and serial num");
+				//data_b[ipv6_address.Length + tmp_b_len] = (byte)(data_to_send.Length & 0xFF);
+				//data_b[ipv6_address.Length + tmp_b_len + 1] = (byte)(data_to_send.Length >> 8);
+
+				System.Array.Copy(data_to_send, 0, data_b, ipv6_address.Length + tmp_b_len, data_to_send.Length);
+				//Console.WriteLine("ready to send data");
+				_itransmit_comms.transmit(data_b);
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine(e.Message);
+				Console.WriteLine(e.StackTrace);
+			}
+ 		}
+
+
+
+		public void ReceivedFromUserInterface(byte[] data_recv)
+		{
+			// TODO: // add code here to process data
+			// data recv contains ipv6 address; <2byte length>, common_name+ ";" + serialnumber, data_recv
+			bool ipv6_verified;
+			bool name_verified;
+			int ii, jj;
+			//if (data_recv.Length < _node_ipv6addr.Length)
+			//{
+			//	ipv6_verified = false;
+			//}
+			//else
+			//{
+			//	ii = 0;
+			//	ipv6_verified = true;
+			//	while ((ii < _node_ipv6addr.Length) && ipv6_verified == true)
+			//	{
+			//		if (_node_ipv6addr[ii] != data_recv[ii])
+			//		{
+			//			ipv6_verified = false;
+			//		}
+			//		ii++;
+			//	}	
+			//}
+			ipv6_verified = true; // done at the main layer
+			name_verified = false;
+			//ii = 2 + ASCIIEncoding.ASCII.GetByteCount(_common_name) + 1 + ASCIIEncoding.ASCII.GetByteCount(_serial_num);
+			ii = BitConverter.ToUInt16(data_recv, _node_ipv6addr.Length);
+			string tmpstr = ASCIIEncoding.ASCII.GetString(data_recv, _node_ipv6addr.Length+2, ii-2);
+			string[] tmp_parts = tmpstr.Split(new char[] {';'});
+			if (ipv6_verified)
+			{
+				/*
+				two formats of data can be recievedhere
+				<ipv6 address><length: uint16><common name>;<serial number><Single SingleDataPacket>
+						OR
+				<ipv6 address><length: uint16><common name;serial number><BridgeNodeSingleDataPacket>
+				*/
+				if ( (tmp_parts[0].Equals(_common_name)) && (tmp_parts[1].Equals(_serial_num)) )
+				{
+					name_verified = true;
+				}
+				else
+				{
+					name_verified = false;
+				}
+			}
+
+			Console.WriteLine(string.Format("ipv6 verified => {0}, name_verified = {1}", ipv6_verified, name_verified));
+			if (ipv6_verified && name_verified)
+			{
+				jj = _node_ipv6addr.Length + ii; // + 4;
+				byte[] tmp_recv_b = new byte[data_recv.Length - jj];
+				System.Array.Copy(data_recv, jj, tmp_recv_b, 0, tmp_recv_b.Length);
+				byte[]  combo_pkt = new byte[tmp_recv_b.Length + 2];
+				byte[] tmp_b = BitConverter.GetBytes((ushort)(combo_pkt.Length));
+				combo_pkt[0] = tmp_b[0];
+				combo_pkt[1] = tmp_b[1];
+				System.Array.Copy(tmp_recv_b, 0, combo_pkt, 2, tmp_recv_b.Length);
+				//ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(tmp_recv_b.Length + 2), false, tmp_recv_b, (ushort)tmp_recv_b.Length);
+				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
+				confirmation_recv_event.Reset();
+				confirmation_recv_event.WaitOne();
+				Console.WriteLine("Confirmation received. Wait for data request response");
+
+				resp_recv_event.Reset();
+				resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+
+			}
+		}
+
+		public void SendTimeoutResponseToUserInterface()
+		{
+			// sends timeouit response only if the RS232 command id was received
+			switch (transmit_id) {
+				case (ushort)ProtocolIdentifiers.RS232_COMMAND_ID:
+					byte[] msg_bytes = ASCIIEncoding.ASCII.GetBytes("Error: Timeout");
+					ushort pkt_len = ProtocolMessagesG3PLC.RS232ResponsePacketLen((ushort)msg_bytes.Length);
+					byte[] pkt = new byte[pkt_len];
+					ProtocolMessagesG3PLC.RS232ResponsePacket(pkt, pkt_len,msg_bytes, (ushort)msg_bytes.Length, 0xff); 
+					SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, pkt);					
+					break;
+			}
+		}
+		#endregion //ui_funcs
+
+
+	}
+}
+

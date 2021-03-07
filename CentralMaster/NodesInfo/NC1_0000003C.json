@@ -1,0 +1,18 @@
+{
+  "devices": [
+    {
+      "uuid": "4146c113-5251-48bf-be77-1edc9bb6aaee",
+      "device": "ResponseOneWeatherTransmitter",
+      "channel": 1,
+      "config_command": "Config",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "Get Weather Data",
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "ComputedData":  { }
+}
