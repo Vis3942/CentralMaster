@@ -5,6 +5,7 @@ using System.IO;
 //using System.Runtime.Loader;
 //using System.Text;
 //using System.Threading.Tasks;
+using LogUtils;
 
 namespace CentralMaster.json
 {
@@ -25,7 +26,7 @@ namespace CentralMaster.json
             }
             if (!System.IO.File.Exists(dll_path))
             {
-                Console.WriteLine($"Failed to locate assembly {dll_path}");
+                DCLogger.Error($"Failed to locate assembly {dll_path}");
                 return null;
             }
             string[] tmp_str = func_name.Split('.');
@@ -38,17 +39,17 @@ namespace CentralMaster.json
             //System.Reflection.Assembly tmp_loc_asm = System.Reflection.Assembly.LoadFrom(dll_path); // AssemblyLoadContext.Default.LoadFromAssemblyPath(dll_path);
             //string tmpstr = ass_name + ".ConvertData";
             //int tmpcount = tmp_loc_asm.GetType(tmpstr).GetMethods().Length;
-            //Console.WriteLine($"asm getmethods count {tmpcount}");
+            //RollingFileLogger.Verbose($"asm getmethods count {tmpcount}");
             //string tmp_asm_name = tmp_loc_asm.GetName().FullName;
-            //Console.WriteLine($"assembly name = {tmp_asm_name}");
+            //RollingFileLogger.Verbose($"assembly name = {tmp_asm_name}");
             //for (int ii = 0; ii < tmpcount; ii ++)
             //{
-            //    Console.WriteLine($"method {ii} name => {tmp_loc_asm.GetType($"{ ass_name }.{tmp_str[0]}").GetMethods()[ii].Name}");
+            //    RollingFileLogger.Verbose($"method {ii} name => {tmp_loc_asm.GetType($"{ ass_name }.{tmp_str[0]}").GetMethods()[ii].Name}");
             //}
             System.Reflection.MethodInfo result = tmp_loc_asm.GetType($"{ ass_name }.{tmp_str[0]}").GetMethod(tmp_str[1]);
             if (result == null)
             {
-                Console.WriteLine($"Failed to load method {func_name} from assembly {ass_name}");
+                DCLogger.Error($"Failed to load method {func_name} from assembly {ass_name}");
             }
             return result;
         }

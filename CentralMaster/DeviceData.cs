@@ -10,6 +10,7 @@ using UtilsLibrary;
 using System.Text.Json;
 using CentralMaster.json;
 using System.IO;
+using LogUtils;
 
 namespace CentralMaster
 {
@@ -72,7 +73,7 @@ namespace CentralMaster
                     string device_json_fname = System.IO.Path.Combine("Devices", dev_name+ ".json");
                     if (System.IO.File.Exists(device_json_fname))
                     {
-                        Console.WriteLine(string.Format("Loading device info from file {0}", device_json_fname));
+                        DCLogger.Information(string.Format("Loading device info from file {0}", device_json_fname));
                         string json_str = System.IO.File.ReadAllText(device_json_fname);
                         try
                         {
@@ -81,17 +82,17 @@ namespace CentralMaster
                             // debug
                             if (dev_json != null)
                             {
-                                Console.WriteLine($"dev_json hwinterfacee {dev_json.hwinterface}");
-                                Console.WriteLine($"dev_json get_cmds count = {dev_json.get_commands.Length}");
+                                DCLogger.Information($"dev_json hwinterfacee {dev_json.hwinterface}");
+                                DCLogger.Information($"dev_json get_cmds count = {dev_json.get_commands.Length}");
                             }
                             else
                             {
-                                Console.WriteLine("dev_json is null");
+                                DCLogger.Information("dev_json is null");
                             }
                             foreach (var json_cmd in dev_json.get_commands)
                             {
-                                Console.WriteLine($"json_cmd name = {json_cmd.name}");
-                                Console.WriteLine($"json_cmd response = {json_cmd.response}");
+                                DCLogger.Verbose($"json_cmd name = {json_cmd.name}");
+                                DCLogger.Verbose($"json_cmd response = {json_cmd.response}");
 
                                 if (json_cmd.response.Length > 0)
                                 {
@@ -100,12 +101,13 @@ namespace CentralMaster
                             }
                             bool sts = devices.TryAdd(dev_name, dev_json);
                             // debug
-                            Console.WriteLine($"status adding {dev_name} to devices is {sts}");
+                            DCLogger.Information($"status adding {dev_name} to devices is {sts}");
                         }
                         catch (System.Exception jle)
                         {
-                            Console.WriteLine($"LoadJson: {jle.Message}");
-                            Console.WriteLine(jle.StackTrace);
+                            //Console.WriteLine($"LoadJson: {jle.Message}");
+                            //Console.WriteLine(jle.StackTrace);
+                            DCLogger.Error(jle, "Loading Device Json files");
                         }
                     }
                 }
@@ -140,15 +142,15 @@ namespace CentralMaster
             {
                 LoadDevice(dev_name);
             }
-            Console.WriteLine($"dev_name {dev_name}");
+            DCLogger.Debug($"dev_name {dev_name}");
             foreach (var tmpdev in devices.Keys)
             {
-                Console.WriteLine($"{tmpdev}");
+                DCLogger.Verbose($"{tmpdev}");
             }
             if (devices.ContainsKey(dev_name))
             {
                 //debug
-                Console.WriteLine($"hw interface in GetHWInterfaceForDevice func is => {devices[dev_name].hwinterface}");
+                DCLogger.Debug($"hw interface in GetHWInterfaceForDevice func is => {devices[dev_name].hwinterface}");
                 return devices[dev_name].hwinterface;
             }
             else

@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using LogUtils;
 
 namespace CentralMaster.Communications
 {
@@ -131,10 +132,10 @@ namespace CentralMaster.Communications
                 while (!cts.IsCancellationRequested)
                 {
                     numBytesRead = await stream.ReadAsync(bytes, 0, 2048, cts);
-                    Console.WriteLine(" ------------xxxxxxxxxxxxxxxxxxxxxxx--------------------");
-                    Console.WriteLine(string.Format(" bytes read = {0}", numBytesRead));
-                    Console.WriteLine(BitConverter.ToString(bytes, 0, numBytesRead));
-                    Console.WriteLine("-------------xxxxxxxxxxxxxxxxxxxxxxx--------------------");
+                    DCLogger.Debug(" ------------xxxxxxxxxxxxxxxxxxxxxxx--------------------");
+                    DCLogger.Debug(string.Format(" bytes read = {0}", numBytesRead));
+                    DCLogger.Debug(BitConverter.ToString(bytes, 0, numBytesRead));
+                    DCLogger.Debug("-------------xxxxxxxxxxxxxxxxxxxxxxx--------------------");
                     if (numBytesRead <= 0)
                     {
                         client.Close();
@@ -143,9 +144,9 @@ namespace CentralMaster.Communications
                     else 
                     {
                         pkt_len = BitConverter.ToUInt16(bytes, 0);
-                        Console.WriteLine(string.Format(" num_bytesRead = {0}", numBytesRead));
-                        Console.WriteLine(BitConverter.ToString(bytes, 0, numBytesRead));
-                        Console.WriteLine(string.Format(" recvd from bridge node: pkt len {0}", pkt_len));
+                        DCLogger.Debug(string.Format(" num_bytesRead = {0}", numBytesRead));
+                        DCLogger.Debug(BitConverter.ToString(bytes, 0, numBytesRead));
+                        DCLogger.Information(string.Format(" recvd from bridge node: pkt len {0}", pkt_len));
                         if (numBytesRead == pkt_len)
                         {
                             if (pkt_len == ("subnetdcname?".Length + 2))
@@ -153,8 +154,8 @@ namespace CentralMaster.Communications
                                 string tmpstr = System.Text.ASCIIEncoding.ASCII.GetString(bytes, 2, pkt_len - 2);
                                 if (tmpstr.ToLower().Equals("subnetdcname?"))
                                 {
-                                    Console.WriteLine(string.Format("recv req = {0} ", tmpstr));
-                                    Console.WriteLine(_subnet_identifier);
+                                    DCLogger.Information(string.Format("recv req = {0} ", tmpstr));
+                                    DCLogger.Information(_subnet_identifier);
                                     byte[] name_resp_b = new byte[_subnet_identifier.Length + 2];
                                     byte[] tmp_name_len_b = BitConverter.GetBytes((ushort)name_resp_b.Length);
                                     name_resp_b[0] = tmp_name_len_b[0];
@@ -175,9 +176,9 @@ namespace CentralMaster.Communications
                             // confirm the identifer is equal, else discard
                             //int cmd_id = BitConverter.ToUInt16(bytes, 2);
                             int id_len = BitConverter.ToUInt16(bytes, SUBNET_IDENTIFIER_LENGTH_POSITION);
-                            Console.WriteLine(string.Format(" id_len recvd = {0}", id_len-2));
+                            DCLogger.Debug(string.Format(" id_len recvd = {0}", id_len-2));
                             string id_str = System.Text.Encoding.UTF8.GetString(bytes, SUBNET_IDENTIFIER_POSITION, id_len-2);
-                            Console.WriteLine(string.Format("id str len = {0}", id_str.Length));
+                            DCLogger.Debug(string.Format("id str len = {0}", id_str.Length));
                             WriteMessage(string.Format("received message from BridgeNode: subnet id: {0} ", id_str));
                             if (!id_str.Equals(_subnet_identifier))
                             {
@@ -243,7 +244,7 @@ namespace CentralMaster.Communications
                                 tmp_b[SUBNET_IDENTIFIER_LENGTH_POSITION+1] = tmp_1[1];
                                 byte[] tmp_2 = System.Text.Encoding.ASCII.GetBytes(_subnet_identifier);
                                 System.Array.Copy(tmp_2, 0, tmp_b, SUBNET_IDENTIFIER_POSITION, tmp_2.Length);
-                                Console.WriteLine(string.Format("writing to brudge node len = {0}", tmp_b.Length));
+                                DCLogger.Information(string.Format("writing to brudge node len = {0}", tmp_b.Length));
                                 await stream.WriteAsync(tmp_b, 0, tmp_b.Length);
                             }
                         }
@@ -268,7 +269,7 @@ namespace CentralMaster.Communications
             if (writeToDisplay != null)
                 writeToDisplay(s);
             else
-                Console.WriteLine(s);
+                DCLogger.Information(s);
         }
 
         private void raiseAppDataEvent(byte[] received)
@@ -301,7 +302,7 @@ namespace CentralMaster.Communications
         public void transmit(byte[] to_send)
         {
             string ipv6_str = BitConverter.ToString(to_send, 0, 16);
-            Console.WriteLine(BitConverter.ToString(to_send));
+            DCLogger.Information(BitConverter.ToString(to_send));
             Messages4UI.AddOrUpdate(ipv6_str, to_send, (key, oldValue) => { return to_send; } ); 
             if (_wait_for_response == true)
             {

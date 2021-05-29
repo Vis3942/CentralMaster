@@ -232,7 +232,7 @@ namespace CentralMaster.ip
             ipv6Packet[offset++] = (byte)((Flow >> 8) & 0xFF);
             ipv6Packet[offset++] = (byte)(Flow & 0xFF);
 
-            //Console.WriteLine("Next header = {0}", ipNextHeader);
+            //RollingFileLogger.Verbose("Next header = {0}", ipNextHeader);
 
             byteValue = BitConverter.GetBytes(ipPayloadLength);
             Array.Copy(byteValue, 0, ipv6Packet, offset, byteValue.Length);

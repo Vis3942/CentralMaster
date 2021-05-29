@@ -94,7 +94,7 @@ namespace CentralMaster.ip
         static public void PrintByteArray(byte[ ] printBytes)
         {
             string disp_str = BitConverter.ToString(printBytes).Replace("-", " ");
-			Console.WriteLine(disp_str);
+			//RollingFileLogger.Verbose(disp_str);
         }
     }
 }

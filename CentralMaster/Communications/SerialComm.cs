@@ -5,6 +5,7 @@ using System.IO.Ports;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using LogUtils;
 
 namespace CentralMaster.Communications
 {
@@ -101,7 +102,7 @@ namespace CentralMaster.Communications
             if (writeToDisplay != null)
                 writeToDisplay(s);
             else
-                Console.WriteLine(s);
+                DCLogger.Information(s);
         }
 
         private void raiseAppSerialDataEvent(byte[] received)
@@ -235,48 +236,24 @@ namespace CentralMaster.Communications
             return bytes_read;
         }
 
-        private int ReadDataOld(byte[] buf, int start_index, int length, CancellationToken token)
-        {
-            if (token.IsCancellationRequested)
-                return 0;
 
-            byte tmpByte;
-            int idx = start_index;
-
-            tmpByte = (byte)port.ReadByte();
-
-            while (tmpByte != 255)
-            {
-                buf[idx] = tmpByte;
-                idx++;
-                if (idx >= length)
-                {
-                    break;
-                }
-                tmpByte = (byte)port.ReadByte();
-            }
-            //Console.WriteLine(string.Format("tmpbyte read last {0:x2}", tmpByte)); 
-            return idx - start_index;
-        }
-
-        //private async void serialRxThread()
         private void serialRxThread()
         {
             byte[] buf = new byte[4096];
             int bytesRead;
             //startParsingData();
             cancelRead = new CancellationTokenSource();
-            //Console.WriteLine("starting the recv loop");
+            //DCLogger.Verbose("starting the recv loop");
             while (stopReading == false)
             {
                 try
                 {
-                    //Console.WriteLine("before read async rxthread");
+                    //DCLogger.Verbose("before read async rxthread");
                     //bytesRead = await port.BaseStream.ReadAsync(buf, 0, buf.Length, cancelRead.Token);
                     bytesRead = ReadData(buf, 0, buf.Length, cancelRead.Token);
                     if (bytesRead > 0)
                     {
-                        //Console.WriteLine(string.Format("read {0} bytes ", bytesRead));
+                        DCLogger.Verbose(string.Format("read {0} bytes ", bytesRead));
                         byte[] received = new byte[bytesRead];
                         Buffer.BlockCopy(buf, 0, received, 0, bytesRead);
                         raiseAppSerialDataEvent(received);
@@ -289,7 +266,7 @@ namespace CentralMaster.Communications
                 catch (IOException ioe)
                 {
                     // thread exit or application request to exit
-                    WriteMessage(string.Format("Exception receiving data. Stopped receiving data. {0}", ioe.Message));
+                    DCLogger.Error(ioe, "Exception receiving data. Stopped receiving data.");
                     stopReading = true;
                     if (!cancelRead.Token.IsCancellationRequested)
                     {
@@ -301,12 +278,14 @@ namespace CentralMaster.Communications
                 }
                 catch (Exception e)
                 {
+                    DCLogger.Error(e, "Exception receiving data.");
                     WriteMessage(e.StackTrace);
                     WriteMessage(e.Message);
                     stopReading = true;
                 }
             }
-            //Console.WriteLine("Finished the recv loop");
+            //:$
+            DCLogger.Verbose("Finished the recv loop");
 
         }
 

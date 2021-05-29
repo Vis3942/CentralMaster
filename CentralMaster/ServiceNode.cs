@@ -15,6 +15,7 @@ using System.Timers;
 using CentralMaster.json;
 //using Newtonsoft.Json;
 using UtilsLibrary;
+using LogUtils;
 
 /*
 enum ServiceNodeStates : ushort
@@ -349,7 +350,7 @@ namespace CentralMaster
 		private byte[] _node_ipv6addr = null;
 		private string _node_ipv6addr_str = "";
 		private byte[] _extended_addr = null;
-		private G3.HostMessages _host_messaging = null;
+		private CentralMaster.HostMessages _host_messaging = null;
 		private ushort _current_state;
 		CancellationTokenSource msg_recv = new CancellationTokenSource();
 		private bool sentCommonNameRequest = false;
@@ -526,7 +527,7 @@ namespace CentralMaster
 				_pause_state_machine = value; 
 				if (_pause_state_machine == true) 
 				{
-					//Console.WriteLine("SM: Pause property State machine");
+					//RollingFileLogger.Verbose("SM: Pause property State machine");
 					CheckExecuteStateMachine(false);
 				}
 			}
@@ -605,7 +606,7 @@ namespace CentralMaster
 
 		#endregion // property
 
-		public ServiceNode(byte[] node_ipv6addr, byte[] ext_addr, G3.HostMessages host_messaging,
+		public ServiceNode(byte[] node_ipv6addr, byte[] ext_addr, CentralMaster.HostMessages host_messaging,
 						   System.Timers.Timer app_timer, Communications.ITransmit itransmit_comms, 
 						   int rd_rx_timeout_ms, int rd_confirmation_timeout_secs,
 						   int rd_round_robin_task_sleep_secs, 
@@ -653,7 +654,7 @@ namespace CentralMaster
 
 		public void ExtStateMachine()
 		{
-			//Console.WriteLine("SM: EXT State machine");
+			//RollingFileLogger.Verbose("SM: EXT State machine");
 			Task.Run( () => CheckExecuteStateMachine(false));
 		}
 
@@ -671,8 +672,7 @@ namespace CentralMaster
 			{
 				if (!is_exec)
 				{
-					// debug
-					//Console.WriteLine("CESM: Executing SM");
+					//RollingFileLogger.Verbose("CESM: Executing SM");
 					StateMachine();
 				}
 			}
@@ -691,13 +691,12 @@ namespace CentralMaster
 				}
 				if (!is_exec) 
 				{
-					// debug
-					//Console.WriteLine("CESM: Executing SM");
+					//RollingFileLogger.Debug("CESM: Executing SM");
 					StateMachine();
 				} 
 				else 
 				{
-					Console.WriteLine("Wait to execute state machine failed. Current Exection of state machine did not complete in 1sed");
+					DCLogger.Information("Wait to execute state machine failed. Current Exection of state machine did not complete in 1sed");
 				}
 			}
 		}
@@ -707,8 +706,8 @@ namespace CentralMaster
 			{
 				_state_machine_exec = true;
 			}
-			//Console.WriteLine(string.Format("executing state machine => {0}", _current_state));
-			//Console.WriteLine(string.Format("state machine {2} => 0x{0:x} at {1}", _current_state, 
+			//RollingFileLogger.Debug(string.Format("executing state machine => {0}", _current_state));
+			//RollingFileLogger.Debug(string.Format("state machine {2} => 0x{0:x} at {1}", _current_state, 
 			//	DateTime.Now.TimeOfDay.ToString(), BitConverter.ToString(_node_ipv6addr)));
 
 			if (_pause_state_machine)
@@ -717,7 +716,7 @@ namespace CentralMaster
 				{
 					_state_machine_exec = false;
 				}
-				//Console.WriteLine("DONE executing state machine in pause.");
+				//RollingFileLogger.Debug("DONE executing state machine in pause.");
 				return;
 			}
 			if (_current_state == (ushort)ServiceNodeStates.ATTACHED)
@@ -728,7 +727,7 @@ namespace CentralMaster
 			}
 			else if (_current_state == (ushort) ServiceNodeStates.PROTOCOL_SETUP)
 			{
-				Console.WriteLine("in protocol setup state machine");
+				DCLogger.Information("in protocol setup state machine");
 				ProtocolSetupTask();
 			}
 			else if (_current_state == (ushort)ServiceNodeStates.COMM_READY)
@@ -745,20 +744,20 @@ namespace CentralMaster
 			{
 				_state_machine_exec = false;
 			}
-			Console.WriteLine("DONE executing state machine");
+			DCLogger.Information("DONE executing state machine");
 
 		}
 
 		private void StateMachineNextState(string trigger_str)
 		{
 			// bool state_changed = false;	
-			Console.WriteLine($"curr state: {_current_state}, trigger => {trigger_str}");
+			DCLogger.Debug($"curr state: {_current_state}, trigger => {trigger_str}");
 			if ((_current_state == (ushort) ServiceNodeStates.PROTOCOL_SETUP) &&
 				(trigger_str.Equals("RECEIVED_PROTOCOLSETUP_RESPONSE"))
 			)
 			{
 				// debug
-				//Console.WriteLine("going to comm ready from proto setup");
+				//RollingFileLogger.Debug("going to comm ready from proto setup");
 				_current_state = (ushort)ServiceNodeStates.COMM_READY;
 				// state_changed = true;
 			}
@@ -774,8 +773,8 @@ namespace CentralMaster
 
 			// if ( (state_changed) && (trigger_str.Equals("SHUTDOWN") ) )
 			// {
-			// 	//Console.WriteLine("in state changed statemachine call");
-			// 	Console.WriteLine("SM: state changed State machine");
+			// 	//RollingFileLogger.Information("in state changed statemachine call");
+			// 	RollingFileLogger.Debug("SM: state changed State machine");
 			// 	CheckExecuteStateMachine(true);
 			// }
 		}
@@ -795,13 +794,11 @@ namespace CentralMaster
 
 			if (recv_b != null)
 			{
-				// debug
-				//Console.WriteLine(BitConverter.ToString(recv_b));
+				//RollingFileLogger.Debug(BitConverter.ToString(recv_b));
 				index = 2;
 				while (index < recv_b.Length)
 				{
-					// debug
-					//Console.WriteLine(string.Format("index protocol setup task : {0}, tot len {1}", index, recv_b.Length));
+					//RollingFileLogger.Debug(string.Format("index protocol setup task : {0}, tot len {1}", index, recv_b.Length));
 					ushort message_id = BitConverter.ToUInt16(recv_b, index+2);
 					if (message_id == (ushort)ProtocolIdentifiers.COMMON_NAME_RESPONSE_ID)
 					{
@@ -826,7 +823,7 @@ namespace CentralMaster
 					}
 					else if ( (message_id == (ushort)ProtocolIdentifiers.PROTOCOL_CONFIRM_RESPONSE_ID) )
                     {
-						Console.WriteLine("message id protocol confirm response id recvd.");
+						DCLogger.Information("message id protocol confirm response id recvd.");
 						receivedProtocolSetupResponse = true;
 						index = recv_b.Length;
 					}
@@ -847,9 +844,7 @@ namespace CentralMaster
 						ProcessAsRRCommand(tmp_b);
 						index += tmp_b_len;
 					}
-					// debug
-					//Console.WriteLine(string.Format("recv common: {0}, recv synctime {1}, recv capab {2}", receivedCommonNameResponse, receivedSyncTimeResponse, receivedCapabilityResponse));
-					//if (receivedCommonNameResponse && receivedSyncTimeResponse && receivedCapabilityResponse)
+					//RollingFileLogger.Debug(string.Format("recv common: {0}, recv synctime {1}, recv capab {2}", receivedCommonNameResponse, receivedSyncTimeResponse, receivedCapabilityResponse));
 					if (receivedCommonNameResponse && receivedSyncTimeResponse )
 					{
 						//receivedProtocolSetupResponse = true;
@@ -861,7 +856,7 @@ namespace CentralMaster
 			if (receivedProtocolSetupResponse)
 			{
 				// goto next state
-				Console.WriteLine("recvd proto setup response");
+				DCLogger.Information("recvd proto setup response");
 				StateMachineNextState("RECEIVED_PROTOCOLSETUP_RESPONSE");
 			}
 		}
@@ -879,7 +874,7 @@ namespace CentralMaster
 				recv_b = null;
 				return;
 			}
-			//Console.WriteLine("start of comm ready task");
+			//RollingFileLogger.Verbose("start of comm ready task");
 			if (recv_b != null)
 			{
 				recv_idx = 2;
@@ -887,15 +882,13 @@ namespace CentralMaster
 				{
 					message_len = BitConverter.ToUInt16(recv_b, recv_idx);
 					message_id = BitConverter.ToUInt16(recv_b, recv_idx+2);
-					// debug
-					Console.WriteLine(string.Format("idx {0}, total len {1}, message len {2}, message id {3}", recv_idx, recv_b.Length, message_len, message_id));
+					DCLogger.Debug(string.Format("idx {0}, total len {1}, message len {2}, message id {3}", recv_idx, recv_b.Length, message_len, message_id));
 					byte[] tmp_pkt = new byte[message_len];
 					Array.Copy(recv_b, recv_idx, tmp_pkt, 0, message_len);
 					recv_idx += message_len;
 					if (message_id == (ushort)ProtocolIdentifiers.DATA_RESPONSE_ID)
 					{
 						ProcessAsRRCommand(tmp_pkt);
-						//ProcessDataResponse(tmp_pkt);
 						tmp_pkt = null;
 					}
 					else if (message_id == (ushort)ProtocolIdentifiers.COMMAND_RESPONSE_ID)
@@ -927,20 +920,20 @@ namespace CentralMaster
 					}
 				}
 			}
-			//Console.WriteLine("END of comm ready task");
+			//RollingFileLogger.Debug("END of comm ready task");
 		}
 
 		private void ProcessReceivedMessage(object[] msg_recv)
 		{
 			//byte[] msg_bytes = null;
 			//ushort tmpu16;
-			if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is G3.DataTransferIndication) )
+			if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is CentralMaster.DataTransferIndication) )
 			{
 				// processs data 
-				//Console.WriteLine("callling recv autoreset set ");
-				G3.DataTransferIndication dti = (G3.DataTransferIndication)msg_recv[1];
+				//RollingFileLogger.Verbose("callling recv autoreset set ");
+				CentralMaster.DataTransferIndication dti = (CentralMaster.DataTransferIndication)msg_recv[1];
 				link_qti = (int)dti.link_quality; // this will be appended when sending data to GUI
-				//Console.WriteLine(dti.ToString());
+				//RollingFileLogger.Debug(dti.ToString());
 			// 	if ( (dti.data_recv[2+2] == 0x04) && (dti.data_recv[3+2] == 0x00) ) // +2 for addition for packaged messages
 			// 	{
 			// 		// need to add link quality indicator to message bytes ( 2 bytes for link quality id, and 2 bytes for teh value)
@@ -967,7 +960,7 @@ namespace CentralMaster
 			// 		msg_bytes[dti.data_recv.Length+1] = (byte)( ((ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0xFF00) >> 8 );
 			// 		msg_bytes[dti.data_recv.Length+2] = dti.link_quality;
 			// 		msg_bytes[dti.data_recv.Length+3] = 0x00;
-			// 		//Console.WriteLine("finished modifying recv message data confirmation");
+			// 		//RollingFileLogger.Debug("finished modifying recv message data confirmation");
 			// 	}
 			// 	else 
 			// 	{
@@ -986,7 +979,7 @@ namespace CentralMaster
 					return;
 				}
 				receive_id = BitConverter.ToUInt16(dti.data_recv, 2+2);	
-				Console.WriteLine(string.Format("tx id {0}, rx id {1}", transmit_id, receive_id));
+				DCLogger.Information(string.Format("tx id {0}, rx id {1}", transmit_id, receive_id));
 				if ( ((transmit_id+1) == receive_id) || 
 					 (transmit_id == ProtocolMessagesG3PLC.DATA_REQUEST_ID  && receive_id == ProtocolMessagesG3PLC.BRIDGENODE_DATA_RESPONSE_ID) ||
 					 (transmit_id == ProtocolMessagesG3PLC.COMMAND_REQUEST_ID && receive_id == ProtocolMessagesG3PLC.DATA_RESPONSE_ID) ||
@@ -1001,16 +994,16 @@ namespace CentralMaster
 				// copy data to recv global buffer
 				recv_b = new byte[dti.data_recv.Length];
 				Array.Copy(dti.data_recv, recv_b, dti.data_recv.Length);
-				//Console.WriteLine("SM: Process Recv Message State machine");
+				//RollingFileLogger.Debug("SM: Process Recv Message State machine");
 				CheckExecuteStateMachine(true);
 				resp_recv_event.Set();
 			}
-			else if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is G3.DataTransferConfirm) )
+			else if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is CentralMaster.DataTransferConfirm) )
 			{
 
 				// if status is error, then call 
-				G3.DataTransferConfirm dtc = (G3.DataTransferConfirm) msg_recv[1];
-				Console.WriteLine(dtc.ToString());
+				CentralMaster.DataTransferConfirm dtc = (CentralMaster.DataTransferConfirm) msg_recv[1];
+				DCLogger.Information(dtc.ToString());
 				confirmation_recv_event.Set();
 				if (dtc.status != 0x0000)
 				{
@@ -1034,24 +1027,11 @@ namespace CentralMaster
 			}
 		}
 
-		private void ProcessCapabilityData(byte[] msg_bytes)
-		{
-			// debug
-			Console.WriteLine("Skip Sending capability data to ui");
-			//SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
-			uint capability_len = BitConverter.ToUInt16(msg_bytes, 4);
-			_capability = new ushort[capability_len];
-			for (int ii = 0; ii < capability_len; ii++)
-			{
-				_capability[ii] = BitConverter.ToUInt16(msg_bytes, 6 + (ii * 2));
-			}
-		}
-
 		private void ProcessAsRRCommand(byte[] msg_bytes)
 		{
 			if ((curr_rr_cmd_index < 0) || (curr_rr_cmd_index > rr_cmds_list.Count))
             {
-				Console.WriteLine($"Unable to process current command index -> {curr_rr_cmd_index}, rr_cmd_list count = {rr_cmds_list.Count}");
+				DCLogger.Information($"Unable to process current command index -> {curr_rr_cmd_index}, rr_cmd_list count = {rr_cmds_list.Count}");
 				return;
 			}
 
@@ -1088,7 +1068,7 @@ namespace CentralMaster
 					loc_rr_cmd_list = i2c_cmd_list;
 					break;
 				default:
-					Console.WriteLine($"unknown command enum {rr_cmds_list[curr_rr_cmd_index]}");
+					DCLogger.Information($"unknown command enum {rr_cmds_list[curr_rr_cmd_index]}");
 					break;
 			}
 			bool process_node_data = false;
@@ -1099,7 +1079,7 @@ namespace CentralMaster
 			curr_rr_cmd_index = -1;
 			if (loc_rr_cmd_list == null)
 			{
-				Console.WriteLine($"Failed to compute response for command list for {curr_rr_cmd_index}");
+				DCLogger.Information($"Failed to compute response for command list for {curr_rr_cmd_index}");
 				return;
 			}
 			string tmp_node_name = _common_name + "-" + _serial_num;
@@ -1110,7 +1090,7 @@ namespace CentralMaster
 			int ch_start_idx;
 			ushort pkt_id = BitConverter.ToUInt16(msg_bytes, 2);
 			int ii;
-			Console.WriteLine($"procrrcmd: pkt_id {pkt_id}");
+			DCLogger.Debug($"procrrcmd: pkt_id {pkt_id}");
 			switch (pkt_id)
             {
 				case ProtocolMessagesG3PLC.RS232_RESPONSE_ID:  
@@ -1155,10 +1135,9 @@ namespace CentralMaster
 										cmd_event_id = "";
                                     }
 									AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-									// init debug
 									foreach (var tmp_rd in list_rd)
 									{
-										Console.WriteLine(tmp_rd.ToString());
+										DCLogger.Debug(tmp_rd.ToString());
 									}
 								}
 							}
@@ -1167,7 +1146,7 @@ namespace CentralMaster
                     }
 					break;
 				case ProtocolMessagesG3PLC.DALI_RESPONSE_ID:
-					Console.WriteLine($" Unimplemented response id recvd => {pkt_id}");
+					DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
 					break;
 				case ProtocolMessagesG3PLC.ANALOG_INPUT_RESPONSE_ID:
 					while (index < msg_bytes.Length)
@@ -1175,28 +1154,26 @@ namespace CentralMaster
 						ch_num = msg_bytes[index];
 						ch_start_idx = index + 1;
 						ch_data_len =  4; // float 4 bytes
-						Console.WriteLine($"procrrcmd: channel {ch_num} ch start idx {ch_start_idx}");
+						DCLogger.Debug($"procrrcmd: channel {ch_num} ch start idx {ch_start_idx}");
 						RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
-						//debug
 						if (tmp_rr_cmd != null)
                         {
-							Console.WriteLine($"procrrcmd: cmd name = {tmp_rr_cmd.command_name} dev name = {tmp_rr_cmd.device_name}");
+							DCLogger.Debug($"procrrcmd: cmd name = {tmp_rr_cmd.command_name} dev name = {tmp_rr_cmd.device_name}");
 						}
 						else
                         {
-							Console.WriteLine("procrrcmd: tmp_rr_cmd is NULL");
+							DCLogger.Debug("procrrcmd: tmp_rr_cmd is NULL");
                         }
 						if (tmp_rr_cmd != null)
 						{
 							List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
-							//debug
 							if (list_rd != null)
                             {
-								Console.WriteLine($"computed {list_rd[0].ToString()}");
+								DCLogger.Debug($"computed {list_rd[0].ToString()}");
 							}
 							else
                             {
-								Console.WriteLine($"computed list was NULL");
+								DCLogger.Debug($"computed list was NULL");
 
 							}
 							if (list_rd != null)
@@ -1227,10 +1204,9 @@ namespace CentralMaster
 									cmd_event_id = "";
 								}
 								AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-								// init debug
 								foreach (var tmp_rd in list_rd)
 								{
-									Console.WriteLine(tmp_rd.ToString());
+									DCLogger.Debug(tmp_rd.ToString());
 								}
 							}
 						}
@@ -1258,10 +1234,9 @@ namespace CentralMaster
 									cmd_event_id = "";
 								}
 								AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-								// debug
 								foreach (var tmp_rd in list_rd)
 								{
-									Console.WriteLine(tmp_rd.ToString());
+									DCLogger.Debug(tmp_rd.ToString());
 								}
 							}
 						}
@@ -1269,16 +1244,16 @@ namespace CentralMaster
 					}
 					break;
 				case ProtocolMessagesG3PLC.POWER_MEASUREMENT_RESPONSE_ID:
-					Console.WriteLine($" Unimplemented response id recvd => {pkt_id}");
+					DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
 					break;
 				default:
-					Console.WriteLine($" Unsupported response id recvd => {pkt_id}");
+					DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
 					break;
             }
 			if (process_node_data)
             {
 				List<ResponseData> node_rd = null;
-				Console.WriteLine("todo: processing node data and send to DataServices Layer");
+				DCLogger.Information("Process node data and send to DataServices Layer");
 				if (node_devices.computedData != null)
                 {
 					if ( 
@@ -1291,17 +1266,11 @@ namespace CentralMaster
 															new object[] { node_recvd_data, param_dict });
 					}
 				}
-				//foreach(var tmp_tfd in node_recvd_data)
-    //            {
-				//	string tmpstr = System.Text.Json.JsonSerializer.Serialize(tmp_tfd);
-				//	_dc_dataservice_comms.TransmitToDataService(tmpstr);
-    //            }
 				if (node_rd != null)
                 {
-					// debug
 					foreach (var tmp_rd in node_rd)
 					{
-						Console.WriteLine(tmp_rd.ToString());
+						DCLogger.Debug(tmp_rd.ToString());
 					}
 
 					TransferData tmp_td = new TransferData();
@@ -1315,12 +1284,12 @@ namespace CentralMaster
 						)
                     {
 						string[] tmp_name_map = node_devices.computedData.data_names.Replace(" ", "").Replace(":", ",").Split(',');
-						//Console.WriteLine($"node: map name length {tmp_name_map.Length}");
+						DCLogger.Debug($"node: map name length {tmp_name_map.Length}");
 						if (tmp_name_map.Length % 2 == 0)
 						{
 							for (int kk = 0; kk < tmp_name_map.Length; kk += 2)
 							{
-								//Console.WriteLine($"{ii}: {tmp_name_map[ii]} => {tmp_name_map[ii + 1]}");
+								DCLogger.Verbose($"{kk}: {tmp_name_map[kk]} => {tmp_name_map[kk + 1]}");
 								data_name_map.Add(tmp_name_map[kk].Trim(), tmp_name_map[kk+1].Trim());
 							}
 						}
@@ -1328,17 +1297,10 @@ namespace CentralMaster
 				}
 				else
                 {
-					Console.WriteLine("NODE RD computed data is NULL NULL NULL");
+					DCLogger.Information("NODE RD computed data is NULL NULL NULL");
                 }
-				// TODO: MODIFY THE NAMES ACCCORDING TO data_name_map variable before pushing it to DataService
-				//debug display data map
-				//StringBuilder sb = new StringBuilder();
-				//foreach (var ttdm in data_name_map)
-				//            {
-				//	sb.AppendLine(ttdm.ToString());
-				//            }
-				//Console.WriteLine(sb.ToString());
-				Console.WriteLine($"datamap length = {data_name_map.Count}");
+				// MODIFY THE NAMES ACCCORDING TO data_name_map variable before pushing it to DataService
+				DCLogger.Information($"datamap length = {data_name_map.Count}");
 				foreach (TransferData tmp_td in node_recvd_data)
                 {
 					foreach (var tmp_rd in tmp_td.Data)
@@ -1347,7 +1309,7 @@ namespace CentralMaster
                         {
 							tmp_rd.Name = data_name_map[tmp_rd.Name];
 							// debug
-							Console.WriteLine(tmp_rd.ToString());
+							DCLogger.Debug(tmp_rd.ToString());
 
 						}
 					}
@@ -1356,7 +1318,7 @@ namespace CentralMaster
 				TransferDataList tdl = new TransferDataList();
 				tdl.Items = node_recvd_data;
 				string tmpstr = System.Text.Json.JsonSerializer.Serialize(tdl);
-				Console.WriteLine("Sending to data services layer");
+				DCLogger.Information("Sending to data services layer");
 				_dc_dataservice_comms.TransmitToDataService(tmpstr);
 			}
 			// keep the current behavior to send data to ui
@@ -1379,7 +1341,7 @@ namespace CentralMaster
 			UInt16 tmpu16_1;
 			byte [] mod_bytes;
 			
-			Console.WriteLine(string.Format("Sending Data response to ui; length = {0}", msg_bytes.Length));
+			DCLogger.Information(string.Format("Sending Data response to ui; length = {0}", msg_bytes.Length));
 			tmpu16_1 = BitConverter.ToUInt16(msg_bytes, 0); // total len of msg_bytes
 			mod_bytes = new byte[tmpu16_1-2];
 			System.Array.Copy(msg_bytes, 2, mod_bytes, 0, tmpu16_1-2 );
@@ -1442,7 +1404,7 @@ namespace CentralMaster
 			if (timer_count >= required_timer_count)
 			{
 				StopCounting();
-				//Console.WriteLine("SM: On Timer elapsed State machine");
+				//RollingFileLogger.Debug("SM: On Timer elapsed State machine");
 				Task.Run(
 					() => CheckExecuteStateMachine(false)
 				);
@@ -1458,7 +1420,7 @@ namespace CentralMaster
 			resp_recv_event.Set();
 
 			shutdownRequest = true;
-			//Console.WriteLine("SM: Shutdown req State machine");
+			//RollingFileLogger.Information("SM: Shutdown req State machine");
 
 			StateMachine();
 			msg_recv.Cancel();
@@ -1476,8 +1438,7 @@ namespace CentralMaster
 			Task.Run(
 				() =>
 				{
-					// debug
-					//Console.WriteLine("in Put message: recv msg_obj");
+					//RollingFileLogger.Debug("in Put message: recv msg_obj");
 					ProcessReceivedMessage(msg_obj);
 				}
 			);
@@ -1504,7 +1465,7 @@ namespace CentralMaster
 		private bool TransmitDataToNode(byte[] pkt, byte[] _node_ipv6addr, bool isUDP)
 		{
 			transmit_id = BitConverter.ToUInt16(pkt, 2+2);
-			Console.WriteLine(string.Format("tx id {0}", transmit_id));
+			DCLogger.Information(string.Format("tx id {0}", transmit_id));
 			//return _host_messaging.SendDataToNode(pkt, _node_ipv6addr, true);			
 			return _host_messaging.SendDataToNode(pkt, HostApp.CoordinatorIPv6Address, _node_ipv6addr, true);
 		}
@@ -1567,7 +1528,7 @@ namespace CentralMaster
         {
 			string node_cmd_filename = _common_name + "_" + _serial_num + ".json";
 			string node_fname = System.IO.Path.Combine("NodesInfo", node_cmd_filename);
-			Console.WriteLine($"Loading devices for node -> {node_fname}");
+			DCLogger.Information($"Loading devices for node -> {node_fname}");
 			if (System.IO.File.Exists(node_fname))
 			{
 				string json_str = System.IO.File.ReadAllText(node_fname);
@@ -1583,14 +1544,13 @@ namespace CentralMaster
 				}
 				catch (System.Exception e)
 				{
-					Console.WriteLine(e.Message);
+					DCLogger.Error(e, $"reading node file {node_fname}");
 					node_devices = null;
 				}
 			}
 			else
 			{
-				// debug
-				Console.WriteLine("node json not found");
+				DCLogger.Error("node json not found");
 				node_devices = null;
 			}
 
@@ -1618,11 +1578,6 @@ namespace CentralMaster
 					{
 						if (di.config_command.Length != 0)
 						{
-                            //Console.WriteLine(string.Format("uuid {0}, exits in configure {1}", di.uuid, configured.ContainsKey(di.uuid)));
-                            //if (configured.ContainsKey(di.uuid))
-                            //{
-                            //Console.WriteLine(configured[di.uuid]);
-                            //}
                             RRCommand tmp_rr_cmd = new RRCommand
                             {
                                 uuid = di.uuid,
@@ -1636,11 +1591,6 @@ namespace CentralMaster
 
 						if (di.init_command.Length != 0)
 						{
-                            //Console.WriteLine(string.Format("uuid {0}, exits in configure {1}", di.uuid, initialized.ContainsKey(di.uuid)));
-                            //if (initialized.ContainsKey(di.uuid))
-                            //{
-                            //     Console.WriteLine(initialized[di.uuid]);
-                            //}
                             RRCommand tmp_rr_cmd = new RRCommand
                             {
                                 uuid = di.uuid,
@@ -1688,7 +1638,7 @@ namespace CentralMaster
 									i2c_cmd_list.Add(tmp_rr_cmd);
 									break;
 								default:
-									Console.WriteLine($"unknown hw itnerfadce type {hw_interface}. Unable to process");
+									DCLogger.Information($"unknown hw itnerfadce type {hw_interface}. Unable to process");
 									break;
                             }
 						}
@@ -1755,7 +1705,6 @@ namespace CentralMaster
 		{
 			if (node_devices != null)
 			{
-				//Console.WriteLine(string.Format("SENDING COMMAND = > {0}", to_send_rrcmd.command_name));
 				curr_rr_cmd_index = command_index;
 				SendDCRequestEventWithTimeout(command_index);
 			}
@@ -1798,18 +1747,18 @@ namespace CentralMaster
 					loc_rr_cmd_list = i2c_cmd_list;
 					break;
 				default:
-					Console.WriteLine($"unknown command enum {rr_cmds_list[cmd_list_index]}");
+					DCLogger.Information($"unknown command enum {rr_cmds_list[cmd_list_index]}");
 					break;
 			}
 			if (loc_rr_cmd_list == null)
             {
-				Console.WriteLine($"Failed to parse command list for {cmd_list_index}");
+				DCLogger.Information($"Failed to parse command list for {cmd_list_index}");
 				return false;
             }
 
 			if (loc_rr_cmd_list.Count == 0)
             {
-				Console.WriteLine($"List for {Enum.GetName(typeof(RRGetCommandTypes), rr_cmds_list[cmd_list_index])} is empty");
+				DCLogger.Information($"List for {Enum.GetName(typeof(RRGetCommandTypes), rr_cmds_list[cmd_list_index])} is empty");
 				return false;
 			}
 
@@ -1839,7 +1788,7 @@ namespace CentralMaster
 						rr_cmd.channel, cmd_type_b, address, cmd_data, cmd_data.Length);
 					if (pkt_len == 0xFFFF)
                     {
-						Console.WriteLine($"RS232: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						DCLogger.Error($"RS232: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
                     }
 				}
@@ -1867,31 +1816,30 @@ namespace CentralMaster
 						rr_cmd.channel, cmd_type_b, address, cmd_data, cmd_data.Length);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"RS485: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						DCLogger.Error($"RS485: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
 					}
 				}
 			}
 			else if (hw_interface_type.ToLower().Equals("powermeasurement"))
 			{
-				Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			else if (hw_interface_type.ToLower().Equals("dali"))
 			{
-				Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			else if (hw_interface_type.ToLower().Equals("analog"))
 			{
 				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.ANALOG_INPUT_REQUEST_ID, ref pkt, pkt.Length);
 				foreach (var rr_cmd in loc_rr_cmd_list)
                 {
-					//Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 					JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
 					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.ANALOG_INPUT_REQUEST_ID, ref pkt, pkt.Length,
 						rr_cmd.channel);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"Analog input: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						DCLogger.Error($"Analog input: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
 					}
 				}
@@ -1901,13 +1849,12 @@ namespace CentralMaster
 				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.DIGITAL_INPUT_REQUEST_ID, ref pkt, pkt.Length);
 				foreach (var rr_cmd in loc_rr_cmd_list)
 				{
-					//Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 					JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
 					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.DIGITAL_INPUT_REQUEST_ID, ref pkt, pkt.Length,
 						rr_cmd.channel);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"Digital input: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						DCLogger.Error($"Digital input: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
 					}
 				}
@@ -1935,14 +1882,14 @@ namespace CentralMaster
 						rr_cmd.channel, cmd_type_b, address, cmd_data, cmd_data.Length);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"i2c: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						DCLogger.Error($"i2c: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
 					}
 				}
 			}
 			else
 			{
-				Console.WriteLine($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			combo_pkt = new byte[pkt_len + 2];
 			combo_pkt[0] = (byte)(pkt_len + 2);
@@ -1951,23 +1898,23 @@ namespace CentralMaster
 
             if (pkt_len == 0)
 			{
-				Console.WriteLine("Packet length is 0. Should not happen consult developer.");
+				DCLogger.Error("Packet length is 0. Should not happen consult developer.");
 				return false; // cannot do any furhter processing => probably invalid command
 			}
 			_data_cmd_time = DateTime.Now;
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			DCLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
 			confirmation_recv_event.Reset();
 			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
 			if (sts)
 			{
-				Console.WriteLine("Confirmation received. Wait for data request response");
+				DCLogger.Information("Confirmation received. Wait for data request response");
 				resp_recv_event.Reset();
 				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
 			}
 			else 
 			{
-				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
+				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
 			}
 			return sts;
 		}
@@ -1987,9 +1934,9 @@ namespace CentralMaster
 					string[] data_str = send_json_cmd.value.Split(',');
 					if (data_str.Length != 6)
 					{
-						System.Console.WriteLine(string.Format("expected config format \"baud rate, num bits, parity(N/E/O), stopbits,delimiter char as int, 0/1 (disable/enable SW flow control xon_xoff\", got {0}", 
+						DCLogger.Information(string.Format("expected config format \"baud rate, num bits, parity(N/E/O), stopbits,delimiter char as int, 0/1 (disable/enable SW flow control xon_xoff\", got {0}", 
 							send_json_cmd.value));
-						System.Console.WriteLine(string.Format("Cannot parse and send config commands"));
+						DCLogger.Information(string.Format("Cannot parse and send config commands"));
 						return null;
 					}
 					data_2_send = new byte[9];
@@ -2018,7 +1965,7 @@ namespace CentralMaster
 					else
 					{
 						// invalid parity setting
-						System.Console.WriteLine("Invalid parity setting, expected N,E or O");
+						DCLogger.Information("Invalid parity setting, expected N,E or O");
 						return null;
 					}
 					data_2_send[5] = Convert.ToByte(data_str[2]); // num bits
@@ -2028,7 +1975,7 @@ namespace CentralMaster
 				}
 				else
 				{
-					Console.WriteLine($"Converting string[] {send_json_cmd.value} as ASCII byte array");
+					DCLogger.Information($"Converting string[] {send_json_cmd.value} as ASCII byte array");
 					//byte[] tmpb = System.Text.Encoding.ASCII.GetBytes(dev_rs232_cmds.commands[index].send_command);
 					MemoryStream ms = new MemoryStream();
 					foreach (char tmpch in send_json_cmd.value)
@@ -2044,7 +1991,7 @@ namespace CentralMaster
 			}
 			else if (send_json_cmd.type.ToLower().Equals("string"))
             {
-				Console.WriteLine($"Converting string {send_json_cmd.value} as ASCII byte array");
+				DCLogger.Information($"Converting string {send_json_cmd.value} as ASCII byte array");
 				//byte[] tmpb = System.Text.Encoding.ASCII.GetBytes(dev_rs232_cmds.commands[index].send_command);
 				MemoryStream ms = new MemoryStream();
 				foreach (char tmpch in send_json_cmd.value)
@@ -2132,14 +2079,14 @@ namespace CentralMaster
 			}
 			if (node_devices == null)
             {
-				Console.WriteLine($"Failed to load node json from {_common_name}_{_serial_num}.json");
+				DCLogger.Error($"Failed to load node json from {_common_name}_{_serial_num}.json");
 				return false;
             }
 			// locate current device name
 			DeviceInfo dev_info = Array.Find<DeviceInfo>(node_devices.devices, x => x.uuid == cmd_for_node.UUID);
 			if (dev_info == null)
             {
-				Console.WriteLine($"Failed to locate device with uuid {cmd_for_node.UUID} in Node {cmd_for_node.Node}");
+				DCLogger.Error($"Failed to locate device with uuid {cmd_for_node.UUID} in Node {cmd_for_node.Node}");
 				return false;
             }
 
@@ -2161,7 +2108,7 @@ namespace CentralMaster
 						dev_info.channel, cmd_type_b, address, cmd_data, cmd_data.Length);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"RS232: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}");
+						DCLogger.Error($"RS232: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}");
 						return false;
 					}
 				}
@@ -2181,18 +2128,18 @@ namespace CentralMaster
 						dev_info.channel, cmd_type_b, address, cmd_data, cmd_data.Length);
 					if (pkt_len == 0xFFFF)
 					{
-						Console.WriteLine($"RS232: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}");
+						DCLogger.Error($"RS232: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}");
 						return false;
 					}
 				}
 			}
 			else if (hw_interface_type.ToLower().Equals("powermeasurement"))
 			{
-				Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			else if (hw_interface_type.ToLower().Equals("dali"))
 			{
-				Console.WriteLine($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			else if (hw_interface_type.ToLower().Equals("analog"))
 			{
@@ -2207,7 +2154,7 @@ namespace CentralMaster
 						pkt_len = ProtocolMessagesG3PLC.AddToPacketAnalogOutputCommand(ref pkt, pkt.Length, dev_info.channel, conv_float);
 						if (pkt_len == 0xFFFF)
 						{
-							Console.WriteLine($"Analog out: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
+							DCLogger.Error($"Analog out: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
 							return false;
 						}
 					}
@@ -2230,7 +2177,7 @@ namespace CentralMaster
 						pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalOutputCommand(ref pkt, pkt.Length, dev_info.channel, (byte)conv_int);
 						if (pkt_len == 0xFFFF)
 						{
-							Console.WriteLine($"Analog out: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
+							DCLogger.Error($"Analog out: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
 							return false;
 						}
 					}
@@ -2238,7 +2185,7 @@ namespace CentralMaster
 			}
 			else
 			{
-				Console.WriteLine($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
 			combo_pkt = new byte[pkt_len + 2];
 			combo_pkt[0] = (byte)(pkt_len + 2);
@@ -2247,24 +2194,24 @@ namespace CentralMaster
 
 			if (pkt_len == 0)
 			{
-				Console.WriteLine("Packet length is 0. Should not happen consult developer.");
+				DCLogger.Error("Packet length is 0. Should not happen consult developer.");
 				return false; // cannot do any furhter processing => probably invalid command
 			}
 			cmd_event_id = cmd_for_node.EventId;
 			_data_cmd_time = DateTime.Now;
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			//RollingFileLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
 			confirmation_recv_event.Reset();
 			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
 			if (sts)
 			{
-				Console.WriteLine("Confirmation received. Wait for data request response");
+				DCLogger.Information("Confirmation received. Wait for data request response");
 				resp_recv_event.Reset();
 				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
 			}
 			else
 			{
-				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs / 1000));
+				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs / 1000));
 			}
 			return sts;
 		}
@@ -2325,18 +2272,18 @@ namespace CentralMaster
 			_data_cmd_time = DateTime.Now; // we get a data response with proto setup too; so it could also be considered a command
 
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			//RollingFileLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
 			confirmation_recv_event.Reset();
 			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
 			if (sts)
 			{
-				Console.WriteLine("Confirmation received. Wait for Protocol request response");
+				DCLogger.Information("Confirmation received. Wait for Protocol request response");
 				resp_recv_event.Reset();
 				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
 			}
 			else 
 			{
-				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs/1000));
+				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs/1000));
 			}
 			return sts;
 		}
@@ -2364,18 +2311,18 @@ namespace CentralMaster
 			_data_cmd_time = DateTime.Now; // we get a data response with proto setup too; so it could also be considered a command
 
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-			//Console.WriteLine("callling recv autoreset reset and waitone 3000 ");
+			//RollingFileLogger.Information("callling recv autoreset reset and waitone 3000 ");
 			confirmation_recv_event.Reset();
 			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
 			if (sts)
 			{
-				Console.WriteLine("Confirmation received. Wait for Protocol confirm response");
+				DCLogger.Information("Confirmation received. Wait for Protocol confirm response");
 				resp_recv_event.Reset();
 				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
 			}
 			else
 			{
-				Console.WriteLine(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
+				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
 			return sts;
 		}
@@ -2390,14 +2337,14 @@ namespace CentralMaster
 			if (_itransmit_comms == null)
 			{
 				// cannot send any data to ui; display in console
-				Console.WriteLine(String.Format("ipv6 [{0}], name -> {1}, data ->{2}",
+				DCLogger.Information(String.Format("ipv6 [{0}], name -> {1}, data ->{2}",
 					_node_ipv6addr_str,
 					common_name + ";" + serial_num,
 				                                BitConverter.ToString(data_to_send, 0, data_to_send.Length)));
 				return;
 			}
 
-			//Console.WriteLine("in SentToUserInterface function");
+			//RollingFileLogger.Information("in SentToUserInterface function");
 			// data format: ipv6_address bytes, length => 2 bytes
 			//              common_name + ";" + serial_num (corresponding to length bytes)
 			//              length of data => 2 bytes, data (as per length specified in the prev 2 bytes)
@@ -2408,24 +2355,24 @@ namespace CentralMaster
 				int data_b_len = ipv6_address.Length + tmp_b_len + data_to_send.Length; 
 				byte[] data_b = new byte[data_b_len];
 				System.Array.Copy(ipv6_address, 0, data_b, 0, ipv6_address.Length);
-				//Console.WriteLine("Finished copy ipv6 address");
+				DCLogger.Verbose("Finished copy ipv6 address");
 				data_b[ipv6_address.Length] = (byte)(tmp_b_len & 0xFF);
 				data_b[ipv6_address.Length + 1] = (byte)(tmp_b_len >> 8);
 				byte[] tmp_b = new byte[tmp_b_len];
 				tmp_b = ASCIIEncoding.ASCII.GetBytes(common_name + ';' + serial_num);
 				System.Array.Copy(tmp_b, 0, data_b, ipv6_address.Length + 2, tmp_b_len-2);
-				//Console.WriteLine("Finished copy common name and serial num");
+				DCLogger.Verbose("Finished copy common name and serial num");
 				//data_b[ipv6_address.Length + tmp_b_len] = (byte)(data_to_send.Length & 0xFF);
 				//data_b[ipv6_address.Length + tmp_b_len + 1] = (byte)(data_to_send.Length >> 8);
 
 				System.Array.Copy(data_to_send, 0, data_b, ipv6_address.Length + tmp_b_len, data_to_send.Length);
-				//Console.WriteLine("ready to send data");
+				DCLogger.Verbose("send data to UI ");
 				_itransmit_comms.transmit(data_b);
 			}
 			catch (Exception e)
 			{
-				Console.WriteLine(e.Message);
-				Console.WriteLine(e.StackTrace);
+				DCLogger.Error(e, "Send To User Interface");
+				//RollingFileLogger.Error(e.StackTrace);
 			}
  		}
 
@@ -2479,7 +2426,7 @@ namespace CentralMaster
 				}
 			}
 
-			Console.WriteLine(string.Format("ipv6 verified => {0}, name_verified = {1}", ipv6_verified, name_verified));
+			DCLogger.Information(string.Format("ipv6 verified => {0}, name_verified = {1}", ipv6_verified, name_verified));
 			if (ipv6_verified && name_verified)
 			{
 				jj = _node_ipv6addr.Length + ii; // + 4;
@@ -2494,7 +2441,7 @@ namespace CentralMaster
 				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
 				confirmation_recv_event.Reset();
 				confirmation_recv_event.WaitOne();
-				Console.WriteLine("Confirmation received. Wait for data request response");
+				DCLogger.Information("Confirmation received. Wait for data request response");
 
 				resp_recv_event.Reset();
 				resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
@@ -2510,7 +2457,7 @@ namespace CentralMaster
         {
 			if (_dc_dataservice_comms == null)
             {
-				Console.WriteLine($"Unable to send {send_data.Length} items to data service as endpoint is null.");
+				DCLogger.Information($"Unable to send {send_data.Length} items to data service as endpoint is null.");
 				return;
             }
 			foreach (var tmp_item in send_data)

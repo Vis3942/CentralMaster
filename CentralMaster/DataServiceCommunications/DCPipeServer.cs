@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UtilsLibrary;
+using LogUtils;
 
 namespace CentralMaster.DataServiceCommunications
 {
@@ -80,10 +81,10 @@ namespace CentralMaster.DataServiceCommunications
         {
             while (!pipeServerTokenSrc.IsCancellationRequested)
             {
-                Console.WriteLine("Setting up server pipe");
+                DCLogger.Information("Setting up server pipe");
                 serverPipe = new NamedPipeServerStream(_pipe_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await serverPipe.WaitForConnectionAsync(pipeServerTokenSrc.Token);
-                Console.WriteLine("got connection...");
+                DCLogger.Information("got connection...");
                 if (serverPipe.IsConnected)
                 {
                     swriter = new StreamWriter(serverPipe);
@@ -97,7 +98,7 @@ namespace CentralMaster.DataServiceCommunications
                             break;
                         }
                         task.Wait();
-                        Console.WriteLine("read task completed");
+                        DCLogger.Information("read task completed");
 
                         if ( (serverPipe != null) && (serverPipe.IsConnected) )
                         {
@@ -107,7 +108,7 @@ namespace CentralMaster.DataServiceCommunications
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine(e.Message);
+                        DCLogger.Error(e, "Reading from DCDataservices pipe");
                     }
                     finally
                     {
@@ -119,7 +120,7 @@ namespace CentralMaster.DataServiceCommunications
                     }
                 }
             }
-            Console.WriteLine("exit StartPipedServerAsync");
+            DCLogger.Information("exit StartPipedServerAsync");
         }
 
         public void WriteSimulatedCentralMasterData()
@@ -215,11 +216,11 @@ namespace CentralMaster.DataServiceCommunications
             }
             else
             {
-                Console.WriteLine("FAiled to send to Data Services layer");
-                Console.WriteLine($"serverPipe = {serverPipe}, swriter = {swriter}");
+                DCLogger.Information("Failed to send to Data Services layer");
+                DCLogger.Debug($"serverPipe = {serverPipe}, swriter = {swriter}");
                 if (serverPipe != null)
                 {
-                    Console.WriteLine($"is connected = {serverPipe.IsConnected}");
+                    DCLogger.Debug($"is connected = {serverPipe.IsConnected}");
                 }
             }
         }
@@ -239,13 +240,13 @@ namespace CentralMaster.DataServiceCommunications
                 {
                     break;
                 }
-                Console.WriteLine(string.Format("recv: {0}", recv_str));
+                DCLogger.Information(string.Format("recv: {0}", recv_str));
             }
             if (sreader != null)
             {
                 sreader.Close();
             }
-            Console.WriteLine("Read Data From Pipe: done.");
+            DCLogger.Information("Read Data From Pipe: done.");
             // do you need to restart the connection
         }
 

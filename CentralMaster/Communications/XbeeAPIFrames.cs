@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using LogUtils;
 
 enum ATRESPONSESTATUS : byte
 {
@@ -187,7 +188,7 @@ namespace CentralMaster.Communications
 					ii += tmp_arr.Length;
 				}
 				_bytes[ii] = XbeeAPIFrames.ComputeChecksum(_bytes, 3, tmp_len - 2);
-				System.Console.WriteLine(string.Format("verify checksum comp {0} ", XbeeAPIFrames.VerifyChecksum(_bytes)));
+				DCLogger.Debug(string.Format("verify checksum comp {0} ", XbeeAPIFrames.VerifyChecksum(_bytes)));
 				_byte_arr_computed = true;
 				return _bytes;
 			}
@@ -277,7 +278,7 @@ namespace CentralMaster.Communications
 				System.Array.Copy(_payload, 0, _bytes, ii, _payload.Length);
 				ii += _payload.Length;
 				_bytes[ii] = XbeeAPIFrames.ComputeChecksum(_bytes, 3, tmp_len - 2);
-				System.Console.WriteLine(string.Format("verify checksum comp {0} ", XbeeAPIFrames.VerifyChecksum(_bytes)));
+				DCLogger.Debug(string.Format("verify checksum comp {0} ", XbeeAPIFrames.VerifyChecksum(_bytes)));
 				_byte_arr_computed = true;
 				return _bytes;
 			}
@@ -457,8 +458,8 @@ namespace CentralMaster.Communications
 			_src_port = BitConverter.ToUInt16(tmpb, 0);
 			_protocol = msg_bytes[ii++];
 			_status = msg_bytes[ii++];
-			System.Console.WriteLine(string.Format("src port {0}, dest port {1}", _src_port, _dest_port));
-			System.Console.WriteLine(string.Format("protocol {0}, status {1}", _protocol, _status));
+			DCLogger.Debug(string.Format("src port {0}, dest port {1}", _src_port, _dest_port));
+			DCLogger.Debug(string.Format("protocol {0}, status {1}", _protocol, _status));
 			if (ii >= tmp_len + 3)
 			{
 				_payload = null;

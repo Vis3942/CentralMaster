@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using LogUtils;
 
 enum XbeeDeviceModes : byte
 {
@@ -145,7 +146,7 @@ namespace CentralMaster.Communications
 		private void serialDataReceivedEvent(byte[] received)
 		{
 			byte[] for_len = new byte[2];
-			//Console.WriteLine(string.Format("recv -> {0}", received.Length));
+			DCLogger.Verbose(string.Format("recv -> {0}", received.Length));
 			if (received == null)
 			{
 				return;
@@ -201,14 +202,14 @@ namespace CentralMaster.Communications
 						for_len[1] = tmpQueueBuf[1];
 						msglen = (int)BitConverter.ToUInt16(for_len, 0);
 						//msglen += 4; // 1 for delimiter byte, 2 for length and 1 for checksum
-						System.Console.WriteLine(string.Format("data = {0}", BitConverter.ToString(tmpQueueBuf, 0, tmpQueueBufUsedLength)));
-						System.Console.WriteLine(string.Format("expected msg len = {0}", msglen + 4));
+						DCLogger.Verbose(string.Format("data = {0}", BitConverter.ToString(tmpQueueBuf, 0, tmpQueueBufUsedLength)));
+						DCLogger.Debug(string.Format("expected msg len = {0}", msglen + 4));
 						if (tmpQueueBufUsedLength >= (msglen + 4)) // start delimiter 0x7e, length 2 bytes, checksum 1 byte at end
 						{
 							// valid packat available
 							byte[] forMsgQ = new byte[msglen + 4];
 							Array.Copy(tmpQueueBuf, 0, forMsgQ, 0, msglen + 4);
-							System.Console.WriteLine(string.Format("Adding to queue msg [{0}] => {1} ", msglen + 4, BitConverter.ToString(forMsgQ)));
+							DCLogger.Debug(string.Format("Adding to queue msg [{0}] => {1} ", msglen + 4, BitConverter.ToString(forMsgQ)));
 							addToReceivedMessagesQueue(forMsgQ);
 							// delete data from tmpQueueBuf
 							int tocopylen = tmpQueueBufUsedLength - msglen - 4;
@@ -277,6 +278,7 @@ namespace CentralMaster.Communications
 			}
 			catch (Exception e)
 			{
+				DCLogger.Error(e, "receive Queue work");
 				return false;
 			}
 			return true;
@@ -291,7 +293,7 @@ namespace CentralMaster.Communications
 					try
 					{
 						byte[] processDatab = receiveQueue.Take(cancelParsingMessages.Token);
-						//Console.WriteLine(string.Format("rx Queue Frame Type = 0x{0:x2}, ", processDatab[3]));
+						//RollingFileLogger.Information(string.Format("rx Queue Frame Type = 0x{0:x2}, ", processDatab[3]));
 						ProcessReceivedMessage(processDatab);
 					}
 					catch (Exception e)
@@ -328,8 +330,7 @@ namespace CentralMaster.Communications
 				wait_for_response = false;
 			}
 			response_str = System.Text.Encoding.ASCII.GetString(message_bytes);
-			//debug
-			System.Console.WriteLine(string.Format("ProcCmdMode: {0}", response_str));
+			DCLogger.Debug(string.Format("ProcCmdMode: {0}", response_str));
 		}
 
 		private void ProcessInAPIMode(byte[] message_bytes)
@@ -346,7 +347,7 @@ namespace CentralMaster.Communications
 			response_bytes = new byte[message_bytes.Length];
 			System.Array.Copy(message_bytes, response_bytes, message_bytes.Length);
 			// // debug
-			//System.Console.WriteLine(string.Format(" in process api : {0}", BitConverter.ToString(message_bytes)));
+			//RollingFileLogger.Debug(string.Format(" in process api : {0}", BitConverter.ToString(message_bytes)));
 			if (message_bytes[3] == (byte)FrameTypes.AT_COMMAND_RESPONSE)
 			{
 				// it is a at command response
@@ -375,7 +376,7 @@ namespace CentralMaster.Communications
 			else if (message_bytes[3] == (byte)FrameTypes.IPV4_RX_PACKET)
 			{
 				// rx data frame
-				System.Console.WriteLine("Recvd IPV4 frame");
+				DCLogger.Debug("Recvd IPV4 frame");
 				XbeeRxIpv4Frame xrif = new XbeeRxIpv4Frame(message_bytes);
 				WriteMessage(string.Format(" Rx frame: {0} ", xrif.ToString()));
 				rx_frame_type = message_bytes[3];
@@ -461,7 +462,7 @@ namespace CentralMaster.Communications
 			if (writeToDisplay != null)
 				writeToDisplay(s);
 			else
-				Console.WriteLine(s);
+				DCLogger.Information(s);
 		}
 
 		private void NotifyMessageReceived(byte[] msg_bytes)
@@ -472,7 +473,7 @@ namespace CentralMaster.Communications
 			}
 			else
 			{
-				Console.WriteLine(string.Format("XbeeMsg: Received Message -> {0}", BitConverter.ToString(msg_bytes)));
+				DCLogger.Debug(string.Format("XbeeMsg: Received Message -> {0}", BitConverter.ToString(msg_bytes)));
 			}
 		}
 
@@ -501,8 +502,7 @@ namespace CentralMaster.Communications
 			if (deviceCurrentMode == (byte)XbeeDeviceModes.COMMAND_MODE)
 			{
 				DateTime now = DateTime.UtcNow;
-				// debug
-				System.Console.WriteLine(string.Format(" time since command mode setup {0} secs", (now - command_mode_datetime).TotalSeconds));
+				DCLogger.Debug(string.Format(" time since command mode setup {0} secs", (now - command_mode_datetime).TotalSeconds));
 				if ((now - command_mode_datetime).TotalSeconds > 10)
 				{
 					// system leaves command mode
@@ -518,7 +518,7 @@ namespace CentralMaster.Communications
 					else
 					{
 						// debug
-						System.Console.WriteLine(string.Format("resp to AI command {0}", resp_str));
+						DCLogger.Debug(string.Format("resp to AI command {0}", resp_str));
 						return true;
 					}
 				}
@@ -547,7 +547,7 @@ namespace CentralMaster.Communications
 			if (sts) // successfully setup and verified command mode
 			{
 				resp_str = SendCommandReadResponseCommandMode("AP", mode_val.ToString("X"));
-				System.Console.WriteLine(string.Format("response for AP command {0}", resp_str));
+				DCLogger.Debug(string.Format("response for AP command {0}", resp_str));
 				if (resp_str.Contains("OK"))
 				{
 					sts = true;
@@ -558,7 +558,7 @@ namespace CentralMaster.Communications
 				}
 				System.Threading.Thread.Sleep(500);
 				resp_str = SendCommandReadResponseCommandMode("IP", "4"); // setup for SSL over tcp
-				System.Console.WriteLine(string.Format("response for IP command {0}", resp_str));
+				DCLogger.Debug(string.Format("response for IP command {0}", resp_str));
 				if (resp_str.Contains("OK"))
 				{
 					sts_ip = true;
@@ -569,7 +569,7 @@ namespace CentralMaster.Communications
 				}
 				System.Threading.Thread.Sleep(500);
 				resp_str = SendCommandReadResponseCommandMode("CN", string.Empty);
-				System.Console.WriteLine(string.Format("response for CN command {0}", resp_str));
+				DCLogger.Debug(string.Format("response for CN command {0}", resp_str));
 				if (resp_str != string.Empty)
 				{
 					sts_cn = true;
@@ -597,7 +597,7 @@ namespace CentralMaster.Communications
 				if ((byte)ret_objs[0] == (byte)FrameTypes.AT_COMMAND_RESPONSE)
 				{
 					xacr = (XbeeATCommandResponse)ret_objs[1];
-					//System.Console.WriteLine(string.Format("resp for AI api cmd => {0}", xacr.ToString()));
+					DCLogger.Debug(string.Format("resp for AI api cmd => {0}", xacr.ToString()));
 					if (xacr._param[0] == 0)
 					{
 						return true;
@@ -703,7 +703,7 @@ namespace CentralMaster.Communications
 			}
 			else
 			{
-				System.Console.WriteLine(string.Format("Failed to send {0}: no dest addr ", BitConverter.ToString(payload)));
+				DCLogger.Error(string.Format("Failed to send {0}: no dest addr ", BitConverter.ToString(payload)));
 			}
 		}
 
@@ -727,7 +727,7 @@ namespace CentralMaster.Communications
 
 			int time_elapsed_ms = 0;
 			wait_for_response = true;
-			System.Console.WriteLine(string.Format(" modem status = {0:x2}", _modem_status));
+			DCLogger.Information(string.Format(" modem status = {0:x2}", _modem_status));
 			while (_modem_status == (byte)ModemStatus.UNREGISTERED_WITH_CELLULAR)
 			{
 				// need to do network reset before sending command
@@ -737,7 +737,7 @@ namespace CentralMaster.Communications
 					if ((byte)nr_resp[0] == (byte)FrameTypes.AT_COMMAND_RESPONSE)
 					{
 						XbeeATCommandResponse xacr = (XbeeATCommandResponse)nr_resp[1];
-						System.Console.WriteLine(string.Format("Resp for NR {0}", Utils.GetAPCommandResponseStatusString(xacr._status)));
+						DCLogger.Debug(string.Format("Resp for NR {0}", Utils.GetAPCommandResponseStatusString(xacr._status)));
 						if (xacr._status == (byte)ATRESPONSESTATUS.OK)
 						{
 							// wait for reset to happen before sending another command
@@ -777,8 +777,8 @@ namespace CentralMaster.Communications
 			}
 			catch (Exception ee)
 			{
-				System.Console.WriteLine(ee.StackTrace);
-				System.Console.WriteLine(ee.Message);
+				//RollingFileLogger.Information(ee.StackTrace);
+				DCLogger.Error(ee, "Transmitting Message Xbee");
 				return (ushort)TRANSMITSTATUS.APP_TIMEOUT_TXSTS_RESPONSE;
 			}
 
@@ -818,7 +818,7 @@ namespace CentralMaster.Communications
 				if ((byte)ret_objs[0] == (byte)FrameTypes.AT_COMMAND_RESPONSE)
 				{
 					xacr = (XbeeATCommandResponse)ret_objs[1];
-					System.Console.WriteLine(string.Format("resp for LA api cmd => {0}", xacr.ToString()));
+					DCLogger.Debug(string.Format("resp for LA api cmd => {0}", xacr.ToString()));
 					// succ return
 					if (xacr != null)
 					{

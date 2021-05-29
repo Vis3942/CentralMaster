@@ -9,8 +9,7 @@ using System.Text.Json;
 using CentralMaster.json;
 using UtilsLibrary;
 using CentralMaster.DataServiceCommunications;
-//TODO: check with .net 5 methodology //using Digithought.BlackNet;
-
+using LogUtils;
 
 namespace CentralMaster
 {
@@ -21,7 +20,7 @@ namespace CentralMaster
 		private string ui_connection_name = "";
 		private bool app_started = false;
 		private Communications.SerialComm serial_port = null;
-        readonly G3.HostMessages host_messaging = new G3.HostMessages();
+        readonly CentralMaster.HostMessages host_messaging = new CentralMaster.HostMessages();
 		private int ControllerState = (int)RootNodeStates.UNINITIALIZED;
         readonly byte[] default_xadd_base = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x09 };
         private readonly byte[] default_psk =
@@ -43,7 +42,6 @@ namespace CentralMaster
 		private readonly object comm_ready_lock = new object();
 		private readonly List<ServiceNode> attach_sn_list = new List<ServiceNode>();
 		private readonly object attach_sn_lock = new object();
-		private Communications.WSComms ws_comms = null;
 		private Communications.XbeeMessages xbee_messaging = null;
 		private Communications.SubnetCommunications subnet_gateway = null;
 
@@ -130,12 +128,12 @@ namespace CentralMaster
 			System.Threading.Thread.Sleep(250);
 			gpioController.Write(plc_gpip_pin, System.Device.Gpio.PinValue.High);
 			System.Threading.Thread.Sleep(250);
-			Console.WriteLine("PLC Reset done.");
+			DCLogger.Information("PLC Reset done.");
 		}
 		private void InitApp()
 		{
 			LoadSettings();
-			G3.Utils.update_custom_mask_value(rd_tone_maskvalues);
+			CentralMaster.Utils.update_custom_mask_value(rd_tone_maskvalues);
 			gpioController = new System.Device.Gpio.GpioController(System.Device.Gpio.PinNumberingScheme.Logical);
 
 			ResetPLC();
@@ -157,15 +155,12 @@ namespace CentralMaster
 			}
 			else 
 			{
-				//Console.WriteLine($"uiconnection {ui_connection_name} length {ui_connection_name.Length}");
+				//RollingFileLogger.Information($"uiconnection {ui_connection_name} length {ui_connection_name.Length}");
 				if (ui_connection_name.Length > 0)
                 {
 					if (ui_connection_name.Equals("websocket", StringComparison.CurrentCultureIgnoreCase))
 					{
-						ws_comms = new Communications.WSComms();
-						ws_comms.writeToDisplay += WriteMessage;
-						ws_comms.receivedData += DataFromUI;
-						ws_comms.Start();
+						throw new Exception("Not implementd Websocket option");
 					}
 					else if (ui_connection_name.Equals("socket", StringComparison.CurrentCultureIgnoreCase))
 					{
@@ -198,7 +193,7 @@ namespace CentralMaster
 
 							if (!xbee_messaging.TransmitReady("www.plscentral.com", 8182))
 							{
-								LogError("Failed to connect to domain: sts = " + xbee_messaging.TransmitReadyStatus.ToString("x"));
+								DCLogger.Error("Failed to connect to domain: sts = " + xbee_messaging.TransmitReadyStatus.ToString("x"));
 								throw new Exception("Unable to connect to domain.");
 							}
 						}
@@ -262,14 +257,14 @@ namespace CentralMaster
 			{
 				int dc_name_serialnum_len = BitConverter.ToUInt16(obj_b, 16); // after the ipv6 address
 				string tmpstr = System.Text.Encoding.UTF8.GetString(obj_b, 16 + 2, dc_name_serialnum_len);
-				Console.WriteLine(string.Format("Received multicast cmd from UI: {0}", tmpstr));
+				DCLogger.Information(string.Format("Received multicast cmd from UI: {0}", tmpstr));
 				if ( (comm_ready_node_dict.Count > 0) && (host_messaging != null) )
 				{
 					byte[] multicast_addr = new byte[16];
 					System.Array.Copy(obj_b, 0, multicast_addr, 0, 16);
 					byte[] to_send_b = new byte[obj_b.Length - 16 - dc_name_serialnum_len];
 					System.Array.Copy(obj_b, 16 + dc_name_serialnum_len, to_send_b, 0, obj_b.Length - 16 - dc_name_serialnum_len);
-					Console.WriteLine("Sending multicast packet");
+					DCLogger.Information("Sending multicast packet");
 					byte[] combo_pkt = new byte[to_send_b.Length+2];
 					ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(to_send_b.Length + 2), false, to_send_b, (ushort)to_send_b.Length);
 					host_messaging.SendDataToNode(combo_pkt, HostApp.CoordinatorIPv6Address, multicast_addr, true);
@@ -316,7 +311,7 @@ namespace CentralMaster
                     }
                     catch( Exception e2)
                     {
-                        Console.WriteLine(e2.Message);
+                        DCLogger.Error(e2, "ledq try add");
                     }
 				}
 			}
@@ -589,7 +584,7 @@ namespace CentralMaster
 
 
 
-		private void ReceviedAttachIndication(G3.AttachIndication ai)
+		private void ReceviedAttachIndication(CentralMaster.AttachIndication ai)
 		{
 			WriteMessage(string.Format("Received Attach Indication {0}", ai.ToString()));
 			sspc.PowerLineActive = true;
@@ -601,11 +596,7 @@ namespace CentralMaster
 			Array.Copy(ai.ipv6_addr_prefix, 0, dest_ipv6_addr, 0, 8);
 			Array.Copy(ai.ipv6_addr_suffix, 0, dest_ipv6_addr, 8, 8);
 			Communications.ITransmit to_send_interface;
-			if (ws_comms != null)
-			{
-				to_send_interface = ws_comms;
-			}
-			else if (xbee_messaging != null)
+			if (xbee_messaging != null)
 			{
 				to_send_interface = xbee_messaging;
 			}
@@ -651,7 +642,7 @@ namespace CentralMaster
 						tnn = null;
 						if (node_name_dict.Keys.Contains(node_name))
                         {
-							Console.WriteLine($"Removing {node_name} from internal list");
+							DCLogger.Information($"Removing {node_name} from internal list");
 							node_name_dict.Remove(node_name);
                         }
 						comm_ready_node_dict_changed = true;
@@ -766,7 +757,7 @@ namespace CentralMaster
 			attaching_sn = null;
 		}
 
-		private void ReceivedDetachIndication(G3.DetachIndication di)
+		private void ReceivedDetachIndication(CentralMaster.DetachIndication di)
 		{
 			WriteMessage(string.Format("Received Detach Indication {0}", di.ToString()));
 			string del_ext_addr = BitConverter.ToString(di.extended_addr);
@@ -799,12 +790,11 @@ namespace CentralMaster
 
 		}
 
-		private void ReceivedDataTransferConfirm(G3.DataTransferConfirm dtc) 
+		private void ReceivedDataTransferConfirm(CentralMaster.DataTransferConfirm dtc) 
 		{
-			// debug
-			//Console.WriteLine(dtc.ToString());
+			//RollingFileLogger.Debug(dtc.ToString());
 			string ipv6_addr_str;
-			ipv6_addr_str = G3.Utils.GetIpv6AddressForHandle(dtc.nsdu_handle);
+			ipv6_addr_str = CentralMaster.Utils.GetIpv6AddressForHandle(dtc.nsdu_handle);
 			if (ipv6_addr_str.Length > 0) 
 			{
 
@@ -839,19 +829,19 @@ namespace CentralMaster
 				// is it a multicast address 
 				if (ipv6_addr_str.Equals("ff-02-00-00-00-00-00-00-00-00-00-00-00-00-00-01"))
 				{
-					Console.WriteLine("Received confirmation for multicast command");
+					DCLogger.Information("Received confirmation for multicast command");
 					return;
 				}
 				// debug messages; can be removed after debugging
 				if (tmp_sn == null)
 				{
-					Console.WriteLine(string.Format("Missing node {0} for handle: 0x{1:x2}", ipv6_addr_str, dtc.nsdu_handle));
+					DCLogger.Information(string.Format("Missing node {0} for handle: 0x{1:x2}", ipv6_addr_str, dtc.nsdu_handle));
 				}
 			}
 			else 
 			{
 				// debug messages
-				Console.WriteLine(string.Format("Missing ipv6 address for handle: 0x{0:x2}", dtc.nsdu_handle));
+				DCLogger.Information(string.Format("Missing ipv6 address for handle: 0x{0:x2}", dtc.nsdu_handle));
 			}
 		}
 
@@ -869,21 +859,21 @@ namespace CentralMaster
                     }
                     catch( Exception e2)
                     {
-                        Console.WriteLine(e2.Message);
+                        DCLogger.Error(e2, "recv msg: ledq try add");
                     }
 				}
 			}
 			
 		}
 
-		private void ReceivedDataTransferIndication(G3.DataTransferIndication dti)
+		private void ReceivedDataTransferIndication(CentralMaster.DataTransferIndication dti)
 		{
 			//bool sts;
 			WriteMessage(string.Format("Received Data transfer Indication {0}", dti.ToString()));
 
 			byte[] node_id_ipv6_b = dti.ipv6Header.SourceAddress.GetAddressBytes();
 			string node_id_ipv6_str = BitConverter.ToString(node_id_ipv6_b);
-			Console.WriteLine($"recvd from : {node_id_ipv6_str}");
+			DCLogger.Information($"recvd from : {node_id_ipv6_str}");
 			if ( (sent_cmd_node != null) && node_id_ipv6_str.Equals(sent_cmd_node.IPv6AddresString) ) 
 			{
 				sent_cmd_node.PutMessage(new object[] { CommandTypes.DATA_TRANSFER, dti });
@@ -995,7 +985,7 @@ namespace CentralMaster
 			}
 		}
 
-		private void ReceivedMessage(byte command_type, ushort command_sub_type, G3.MessageHeader message)
+		private void ReceivedMessage(byte command_type, ushort command_sub_type, CentralMaster.MessageHeader message)
 		{
 			ProcessMessages(command_type, command_sub_type, message);
 		}
@@ -1029,7 +1019,7 @@ namespace CentralMaster
 			bool ui_message_available;
 			byte[] ui_msg_b;
 			List<ServiceNode> rr_sn = new List<ServiceNode>();
-			int time_elapsed_ms = 0;
+			//int time_elapsed_ms = 0;
 			WriteMessage("Starting DoRRWork");
 			int rr_index = 0;
 			ServiceNode current_sn = null;
@@ -1116,11 +1106,11 @@ namespace CentralMaster
 					}
 					//if (rr_sn != null)
 					//{
-					//	Console.WriteLine($"rr_sn count = {rr_sn.Count}, rr_idx = {rr_index}");
+					//	RollingFileLogger.Information($"rr_sn count = {rr_sn.Count}, rr_idx = {rr_index}");
 					//}
 					//else
 					//{
-					//	Console.WriteLine("rr_sn is null");
+					//	RollingFileLogger.Information("rr_sn is null");
 					//}
 					if (rr_sn.Count > 0)
 					{
@@ -1129,11 +1119,11 @@ namespace CentralMaster
 							current_sn = rr_sn[rr_index];
 							if (current_sn != null)
                             {
-								Console.WriteLine($"current sn => {current_sn.SerialNumber}");
+								DCLogger.Debug($"current sn => {current_sn.SerialNumber}");
 							}
 							else
                             {
-								Console.WriteLine("current sn null in rr_idx < rr_sn count loop");
+								DCLogger.Debug("current sn null in rr_idx < rr_sn count loop");
                             }
 							rr_index++;
 							if (rr_index >= rr_sn.Count)
@@ -1162,9 +1152,9 @@ namespace CentralMaster
 
 				if (current_sn != null)
 				{
-					Console.WriteLine("sending get number of commands");
+					DCLogger.Debug("sending get number of commands");
 					node_command_count = current_sn.NumberOfCommands();
-					Console.WriteLine($"number of commands = {node_command_count}");
+					DCLogger.Information($"number of commands = {node_command_count}");
 					for (int ii=0; ii < node_command_count; ii++)
 					{
 						current_sn.RxResponseForTx = false;
@@ -1173,7 +1163,7 @@ namespace CentralMaster
 						current_sn.SendCommandWithTimeout(ii);
 						if (current_sn.ExitMode == true)
 						{
-							Console.WriteLine($"Exit mode: {current_sn.ExitMode}");
+							DCLogger.Information($"Exit mode: {current_sn.ExitMode}");
 							string ipv6_str = BitConverter.ToString(current_sn.IPv6AddressBytes);
 							comm_ready_node_dict.Remove(ipv6_str);
 							comm_ready_node_dict_changed = true;
@@ -1184,7 +1174,7 @@ namespace CentralMaster
 				//else
 				//{
 				//	//debug 
-				//	Console.WriteLine("current sn is null");
+				//	RollingFileLogger.Information("current sn is null");
 				//}
 
 
@@ -1215,15 +1205,15 @@ namespace CentralMaster
 			}
 		}
 
-		private void ProcessMessages(byte command_type, ushort command_sub_type, G3.MessageHeader message)
+		private void ProcessMessages(byte command_type, ushort command_sub_type, CentralMaster.MessageHeader message)
 		{
 			bool loc_send_cmd;
 			if (message != null)
             {
-				Console.WriteLine($"Received command type: {command_type}, sub type {command_sub_type}");
+				DCLogger.Information($"Received command type: {command_type}, sub type {command_sub_type}");
 				if (message.bytes != null)
                 {
-					Console.WriteLine(BitConverter.ToString(message.bytes));
+					DCLogger.Information(BitConverter.ToString(message.bytes));
 				}
 			}
 			// process alarm confirmation and alarm messages independent of state machine
@@ -1231,19 +1221,19 @@ namespace CentralMaster
 			{
 				if (command_sub_type == (ushort) AlarmTypes.G3_NETWORK_STATUS)
 				{
-					WriteMessage(((G3.AlarmSubNetworkStatus)message).ToString());
+					WriteMessage(((CentralMaster.AlarmSubNetworkStatus)message).ToString());
 				}
 				else if (command_sub_type == (ushort) AlarmTypes.GENERAL_ERROR)
 				{
-					WriteMessage(((G3.AlarmSubGeneralError)message).ToString());
+					WriteMessage(((CentralMaster.AlarmSubGeneralError)message).ToString());
 				}
 				else
 				{
-					WriteMessage(((G3.Alarm)message).ToString());
+					WriteMessage(((CentralMaster.Alarm)message).ToString());
 				}
 			} else if (command_type == (byte) CommandTypes.SETUP_ALARM)
 			{
-				WriteMessage(((G3.SetAlarmResponse)message).ToString());
+				WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
 			}
 
 
@@ -1261,7 +1251,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte) CommandTypes.GET_MAC_PIB)
 				{
-					G3.GetMACPIBResponse gmpr = (G3.GetMACPIBResponse)message;
+					CentralMaster.GetMACPIBResponse gmpr = (CentralMaster.GetMACPIBResponse)message;
 					WriteMessage(gmpr.ToString());
 					if (gmpr.attribute_id == (uint)MACPIBIds.NEIGHBOUR_TABLE)
 					{
@@ -1301,7 +1291,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.LOAD_SYSTEM_CONFIG)
 				{
-					WriteMessage(((G3.LoadSystemConfigResponse)message).ToString());
+					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigSystem((int)DeviceModes.Normal_Mode);
 					ControllerState = (int)RootNodeStates.STEP04_LOAD_G3_SYSTEM_CONFIG; //(int)RootNodeStates.STEP03_LOAD_SYSTEM_CONFIG;
 				}
@@ -1310,7 +1300,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.LOAD_SYSTEM_CONFIG)
 				{
-					WriteMessage(((G3.LoadSystemConfigResponse)message).ToString());
+					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigSystem((int)DeviceModes.Normal_Mode);
 					ControllerState = (int)RootNodeStates.STEP04_LOAD_G3_SYSTEM_CONFIG;
 				}
@@ -1319,7 +1309,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.LOAD_SYSTEM_CONFIG)
 				{
-					WriteMessage(((G3.LoadSystemConfigResponse)message).ToString());
+					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigG3(false, false, rd_xaddress);
 					ControllerState = (int)RootNodeStates.STEP05_SHUTDOWN; // (int)RootNodeStates.STEP04A_SET_PSK;
 				}
@@ -1328,7 +1318,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.LOAD_SYSTEM_CONFIG)
 				{
-					WriteMessage(((G3.LoadSystemConfigResponse)message).ToString());
+					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendPSK(rd_psk);
 					ControllerState = (int)RootNodeStates.STEP05_SHUTDOWN;
 				}
@@ -1338,11 +1328,11 @@ namespace CentralMaster
 				loc_send_cmd = false;
 				if (command_type == (byte)CommandTypes.LOAD_SYSTEM_CONFIG)
 				{
-					WriteMessage(((G3.LoadSystemConfigResponse)message).ToString());
+					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					loc_send_cmd = true;
 				} else if (command_type == (byte)CommandTypes.SET_MAC_PIB)
 				{
-					WriteMessage(((G3.SetMACPIBResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetMACPIBResponse)message).ToString());
 					loc_send_cmd = true;
 				}
 				if (loc_send_cmd)
@@ -1356,7 +1346,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.SHUTDOWN)
 				{
-					WriteMessage(((G3.ShutDownResponse)message).ToString());
+					WriteMessage(((CentralMaster.ShutDownResponse)message).ToString());
 
 					// wait five / ten seconds after reset
 					System.Threading.Thread.Sleep(5000);  // 10000
@@ -1369,7 +1359,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.GET_SYSTEM_INFO)
 				{
-					WriteMessage(((G3.GetSystemInfoResponse)message).ToString());
+					WriteMessage(((CentralMaster.GetSystemInfoResponse)message).ToString());
 
 					host_messaging.SendSetInfoSubVendorProductIds((ushort)rd_vendor_id, rd_product_id);
 					ControllerState = (int)RootNodeStates.STEP08_SET_TX_PARAMS;
@@ -1380,12 +1370,12 @@ namespace CentralMaster
 				loc_send_cmd = false;
 				if (command_type == (byte)CommandTypes.GET_SYSTEM_INFO)
 				{
-					WriteMessage(((G3.GetSystemInfoResponse)message).ToString());
+					WriteMessage(((CentralMaster.GetSystemInfoResponse)message).ToString());
 					loc_send_cmd = true;
 				}
 				else if (command_type == (byte)CommandTypes.SET_INFO)
 				{
-					WriteMessage(((G3.SetInfoResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
 					loc_send_cmd = true;
 				}
 
@@ -1401,7 +1391,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.SET_INFO)
 				{
-					WriteMessage(((G3.SetInfoResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
 					//host_messaging.SendSetInfoSubRxParams(false, false, false, 0, 0, "Cenelec A 36");
 					//host_messaging.SendSetInfoSubRxParams(false, false, true,7, 0, "Cenelec B");
 					host_messaging.SendSetInfoSubRxParams(false, false, rd_agc, rd_gain_value, 0, rd_tone_maskname);
@@ -1412,7 +1402,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.SET_INFO) // INSTEAD OF NETWORK_START
 				{
-					WriteMessage(((G3.SetInfoResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
 					host_messaging.SendSetAlarm((byte)AlarmTypes.GENERAL_ERROR, true);
 					ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH; // STEP10D_M_START_NETWORK; //STEP10B_M_SET_ALARM; // STEP10C_M_START_NETWORK; //RootNodeStates.STEP12_M_NETWORK_READY;
 				}
@@ -1421,7 +1411,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.SETUP_ALARM)
 				{
-					WriteMessage(((G3.SetAlarmResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
 					host_messaging.SendSetAlarm((byte)AlarmTypes.G3_NETWORK_STATUS, true);
 					ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH; //STEP10D_M_START_NETWORK;
 				}
@@ -1431,7 +1421,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.SETUP_ALARM)
 				{
-					WriteMessage(((G3.SetAlarmResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
 
 					host_messaging.SendSetMACPIB((uint)0xFFFFFFFA, new byte[] { 0, 0 }, 0);
 					ControllerState = (int)RootNodeStates.STEP10E_M_START_NETWORK;
@@ -1443,12 +1433,12 @@ namespace CentralMaster
 				loc_send_cmd = false;
 				if (command_type == (byte)CommandTypes.SETUP_ALARM)
 				{
-					WriteMessage(((G3.SetAlarmResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
 					loc_send_cmd = true;
 				}
 				else if (command_type == (byte)CommandTypes.SET_MAC_PIB)
 				{
-					WriteMessage(((G3.SetMACPIBResponse)message).ToString());
+					WriteMessage(((CentralMaster.SetMACPIBResponse)message).ToString());
 					loc_send_cmd = true;
 				}
 				if (loc_send_cmd)
@@ -1461,7 +1451,7 @@ namespace CentralMaster
 			{
 				if (command_type == (byte)CommandTypes.NETWORK_START)
 				{
-					WriteMessage(((G3.NetworkStartConfirm)message).ToString());
+					WriteMessage(((CentralMaster.NetworkStartConfirm)message).ToString());
 					ControllerState = (int)RootNodeStates.STEP12_M_NETWORK_READY;
 					// initialize the local ipv6 address of coordinator
 					HostApp.coord_ipv6[8] = (byte) ( (rd_pan_id >> 8) & 0x00FF);
@@ -1475,35 +1465,35 @@ namespace CentralMaster
 			}
 		}
 
-		private void ProcessMessagesInReadyState(byte command_type, ushort command_sub_type, G3.MessageHeader message)
+		private void ProcessMessagesInReadyState(byte command_type, ushort command_sub_type, CentralMaster.MessageHeader message)
 		{
 			switch (command_type)
 			{
 			case (byte) CommandTypes.DATA_TRANSFER:
-				WriteMessage(((G3.DataTransferConfirm)message).ToString());
+				WriteMessage(((CentralMaster.DataTransferConfirm)message).ToString());
 				break;
 			case (byte) CommandTypes.DETACH:
-				WriteMessage(((G3.DetachConfirm)message).ToString());
+				WriteMessage(((CentralMaster.DetachConfirm)message).ToString());
 				break;
 			case (byte) CommandTypes.ATTACH:
-				WriteMessage(((G3.AttachIndication)message).ToString());
+				WriteMessage(((CentralMaster.AttachIndication)message).ToString());
 				break;
 			case (byte) CommandTypes.ALARM:
 				if (command_sub_type == (ushort) AlarmTypes.G3_NETWORK_STATUS)
 				{
-					WriteMessage(((G3.AlarmSubNetworkStatus) message).ToString());
+					WriteMessage(((CentralMaster.AlarmSubNetworkStatus) message).ToString());
 				}
 				else if (command_sub_type == (ushort) AlarmTypes.GENERAL_ERROR)
 				{
-					WriteMessage(((G3.AlarmSubGeneralError)message).ToString());
+					WriteMessage(((CentralMaster.AlarmSubGeneralError)message).ToString());
 				}
 				else
 				{
-					WriteMessage(((G3.Alarm)message).ToString());
+					WriteMessage(((CentralMaster.Alarm)message).ToString());
 				}
 				break;
 			case (byte)CommandTypes.SETUP_ALARM:
-				WriteMessage(((G3.SetAlarmResponse)message).ToString());
+				WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
 				break;
 			default:
 				WriteMessage(string.Format("ProcessMessages: received command -> {0}", command_type));
@@ -1562,7 +1552,7 @@ namespace CentralMaster
 
 			// to setup hostmessages to send and rececive
 			host_messaging.SerialConnection = serial_port;
-			host_messaging.writeToDisplay += WriteMessage;
+			//host_messaging.writeToDisplay += WriteMessage;
 			host_messaging.receivedNodeAttach += ReceviedAttachIndication;
 			host_messaging.receivedNodeDetach += ReceivedDetachIndication;
 			host_messaging.receivedDataTransferIndication += ReceivedDataTransferIndication;
@@ -1622,105 +1612,14 @@ namespace CentralMaster
 		#endregion // protocol_funcs
 
 		#region threadsafe_set
-		private static void WriteMessage(string message)
+		private void WriteMessage(string message)
 		{
-			//Application.Current.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Normal,
-			//	new Action(
-			//		delegate()
-			//		{
-			Console.WriteLine(message);
-			//		}
-			//	)
-			//);
-
+			DCLogger.Information(message);
 		}
 
 		#endregion //threadsafe_set
 
 		#region utils
-		// private void DeleteFromNodeExtAddrByValue(string sn_ipv6_addr)
-		// {
-		// 	// do not lock inside this function always lock at the function call level
-		// 	// to prevent race conditions
-		// 	if (node_ext_addr.ContainsValue(sn_ipv6_addr))
-		// 	{
-		// 		string found_key = "";
-		// 		// find key corresponding to sn_ipv6_addr value
-		// 		foreach (string key in node_ext_addr.Keys) {
-		// 			if (node_ext_addr[key].Equals(sn_ipv6_addr))
-		// 			{
-		// 				found_key = key;
-		// 				break;
-		// 			}
-		// 		}
-		// 		if (found_key.Length > 0) {
-		// 			node_ext_addr.Remove (found_key);
-		// 		}
-		// 	}
-		// }
-
-		// private void DeleteFromNodeExtAddrByKey(string ext_addr)
-		// {
-		// 	if (node_ext_addr.ContainsKey (ext_addr)) {
-		// 		node_ext_addr.Remove (ext_addr);
-		// 	}
-		// }
-
-		// private void AddToNodeExtAddr(string ext_addr, string ipv6_addr )
-		// {
-		// 	if (node_ext_addr.ContainsKey (ext_addr)) {
-		// 		node_ext_addr [ext_addr] = ipv6_addr;
-		// 	} else {
-		// 		node_ext_addr.Add(ext_addr, ipv6_addr);
-		// 	}
-		// }
-
-
-		// private void DeleteNodesCommReadyDict(string search_serial_num, string curr_ipv6_str, byte[] ext_addr)
-		// {
-		// 	// do not use comm_ready_lock here, always lock at the function DeleteNodesWithSerialNumber call statement
-		// 	// this is to prevent deadlocks
-		// 	List<string> to_remove = new List<string>();
-		// 	foreach( KeyValuePair<string, ServiceNode> node_item in comm_ready_node_dict )
-		// 	{
-		// 		Console.WriteLine("Key = {0}, Value = {1}", 
-		// 			node_item.Key, node_item.Value);
-		// 		if (node_item.Key.Equals(curr_ipv6_str)) 
-		// 		{
-		// 			to_remove.Add(node_item.Key);
-		// 		}
-		// 		if (Array.Equals(node_item.Value.ExtendedAddress, ext_addr))
-		// 		{
-		// 			if (!to_remove.Contains(node_item.Key))
-		// 			{
-		// 				to_remove.Add(node_item.Key);
-		// 			}
-		// 		}
-		// 		if (node_item.Value.SerialNumber.Equals(search_serial_num, StringComparison.CurrentCultureIgnoreCase))
-		// 		{
-		// 			if (!to_remove.Contains(node_item.Key))
-		// 			{
-		// 				to_remove.Add(node_item.Key);
-		// 			}
-		// 		}
-		// 	}
-		// 	foreach (string del_key in to_remove) {
-		// 		ServiceNode rem_sn = comm_ready_node_dict[del_key];
-		// 		comm_ready_node_dict.Remove (del_key);
-		// 		rem_sn.Shutdown();
-		// 		rem_sn = null;
-		// 	}
-		// }
-
-
-		private void LogError(string error_msg)
-		{
-			using (StreamWriter w = File.AppendText(LOG_FILE_NAME))
-			{
-				w.WriteLine(string.Format("[{0}: {1}", DateTime.Now.ToString("G"), error_msg));
-			}
-		}
-
 		#endregion //utils
 
 	}

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using LogUtils;
 
 namespace CentralMaster
 {
@@ -14,7 +15,7 @@ namespace CentralMaster
         #region vars
         private string _pipe_name = "";
         private NamedPipeClientStream clientPipe = null;
-        Task clientTask = null;
+        //Task clientTask = null;
         private StreamWriter swriter = null;
         private StreamReader sreader = null;
         private CancellationTokenSource pipeClientTokenSrc = new CancellationTokenSource();
@@ -65,7 +66,7 @@ namespace CentralMaster
             }
             else
             {
-                Console.WriteLine("Client already running.");
+                DCLogger.Information("Client already running.");
             }
         }
 
@@ -90,9 +91,9 @@ namespace CentralMaster
             while (!cts.IsCancellationRequested)
             {
                 clientPipe = new NamedPipeClientStream(".", _pipe_name, PipeDirection.InOut, PipeOptions.Asynchronous);
-                Console.WriteLine("attempting to connect.");
+                DCLogger.Information("attempting to connect.");
                 await clientPipe.ConnectAsync();
-                Console.WriteLine("successful connection");
+                DCLogger.Information("successful connection");
 
                 swriter = new StreamWriter(clientPipe);
                 swriter.AutoFlush = true;
@@ -114,12 +115,12 @@ namespace CentralMaster
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine(e.Message);
+                        DCLogger.Error(e, "Write to Status Pipe");
                         break;
                     }                    
                     System.Threading.Thread.Sleep(pingIntervalSecs*1000);
                     //string line = await sreader.ReadLineAsync();
-                    //Console.WriteLine(string.Format("pipe client: Rd: {0}", line));
+                    //RollingFileLogger.Information(string.Format("pipe client: Rd: {0}", line));
                     //if ((line == null) || (line.Equals("end")) || (line.Length == 0))
                     //{
                     //    break;
@@ -142,7 +143,7 @@ namespace CentralMaster
             }
             else
             {
-                Console.WriteLine($"Not connected cannot write to pipe: {message}");
+                DCLogger.Information($"Not connected cannot write message {message} to pipe");
             }
         }
 

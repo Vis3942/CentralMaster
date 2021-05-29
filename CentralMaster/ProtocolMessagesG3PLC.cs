@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using LogUtils;
 
 namespace CentralMaster
 {
@@ -814,7 +815,7 @@ namespace CentralMaster
 			{
 				tmp_curr_len = pkt[0];
 				tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
-                Console.WriteLine(string.Format("curr len {0}: add len {1}, combopktlen {2}", tmp_curr_len, tmp_add_len, pkt_len));
+                DCLogger.Information(string.Format("curr len {0}: add len {1}, combopktlen {2}", tmp_curr_len, tmp_add_len, pkt_len));
 				if ( (tmp_curr_len + tmp_add_len) > pkt_len )
 				{
 					return 0;
@@ -1084,9 +1085,9 @@ namespace CentralMaster
             string[] data_str = config_str.Split(',');
             if (data_str.Length != 6)
             {
-                System.Console.WriteLine(string.Format("expected config format \"baud rate, num bits, parity(N/E/O), stopbits,delimiter char as int, 0/1 (disable/enable SW flow control xon_xoff\", got {0}",
+                DCLogger.Error(string.Format("expected config format \"baud rate, num bits, parity(N/E/O), stopbits,delimiter char as int, 0/1 (disable/enable SW flow control xon_xoff\", got {0}",
                     config_str));
-                System.Console.WriteLine(string.Format("Cannot parse rs232 config"));
+                DCLogger.Error(string.Format("Cannot parse rs232 config"));
                 return null;
             }
             byte[] data_2_send = new byte[11];
@@ -1115,7 +1116,7 @@ namespace CentralMaster
             else
             {
                 // invalid parity setting
-                System.Console.WriteLine("Invalid parity setting, expected N,E or O");
+                DCLogger.Error("Invalid parity setting, expected N,E or O");
                 return null;
             }
             data_2_send[7] = Convert.ToByte(data_str[2]); // num bits

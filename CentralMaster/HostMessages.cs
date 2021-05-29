@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using LogUtils;
 
 enum CommandTypes : byte
 {
@@ -138,7 +139,7 @@ enum MACPIBIds : uint
     NEIGHBOUR_TABLE = 0x006e
 }
 
-namespace G3
+namespace CentralMaster
 {
     public class HostMessages
     {
@@ -173,7 +174,8 @@ namespace G3
         public Action<DataTransferConfirm> receivedDataTransferConfirm = null;
         private BlockingCollection<byte[]> transmitQueue = new BlockingCollection<byte[]>();
         private CancellationTokenSource cancelTransmitQueue = new CancellationTokenSource();
-        private BackgroundWorker transmitWorker = null;
+        //private BackgroundWorker transmitWorker = null;
+        private Task transmitTask = null;
 
         private const int RECEIVE_MESSAGE_CHECK_TIMEOUT_MS = 25;
 
@@ -213,7 +215,7 @@ namespace G3
 
         private void serialDataReceivedEvent(byte[] received)
         {
-            //Console.WriteLine(string.Format("recv -> {0}", received.Length));
+            DCLogger.Verbose(string.Format("recv -> {0}", received.Length));
             if (received == null)
             {
                 return;
@@ -289,7 +291,8 @@ namespace G3
             _serial_conn.receivedData += serialDataReceivedEvent;
             _serial_conn.errorOccured += NotifyErrorOccured;
             startParsingData();
-            StartTransmitBackgroundProcess();
+            //StartTransmitBackgroundProcess();
+            StartTransmitTask();
             serialInterfaceReady = true;
         }
 
@@ -300,7 +303,8 @@ namespace G3
 
             _serial_conn.receivedData -= serialDataReceivedEvent;
             _serial_conn.errorOccured -= NotifyErrorOccured;
-            StopTransmitBackgroundProcess();
+            //StopTransmitBackgroundProcess();
+            StopTransmitTask();
             serialInterfaceReady = false;
         }
 
@@ -326,7 +330,7 @@ namespace G3
                     try
                     {
                         byte[] processDatab = receiveQueue.Take(cancelParsingMessages.Token);
-                    	//Console.WriteLine(string.Format("rx Queue command = 0x{0:x2}, ", processDatab[0]));
+                    	//RollingFileLogger.Verbose(string.Format("rx Queue command = 0x{0:x2}, ", processDatab[0]));
                         ProcessReceivedMessage(processDatab);
                     }
                     catch (Exception e)
@@ -335,12 +339,13 @@ namespace G3
                         // restart
                     }
                 }
-            }, TaskCreationOptions.LongRunning);
+            }, TaskCreationOptions.LongRunning | TaskCreationOptions.AttachedToParent);
         }
 
         private void ProcessReceivedMessage(byte[] message_bytes)
         {
-            WriteMessage(string.Format("recv message type => 0x{0:x} at {1}", message_bytes[0], DateTime.Now.TimeOfDay.ToString())); 
+            //WriteMessage(string.Format("recv message type => 0x{0:x} at {1}", message_bytes[0], DateTime.Now.TimeOfDay.ToString())); 
+            DCLogger.Information(string.Format("recv message type => 0x{0:x} at {1}", message_bytes[0], DateTime.Now.TimeOfDay.ToString()));
             switch (message_bytes[0])
             {
                 case (byte)CommandTypes.GET_SYSTEM_INFO:
@@ -638,7 +643,7 @@ namespace G3
         public bool SendDataToNode(byte[] to_send_b, byte[] ipv6_addr, bool isUDP)
         {
             string ipv6_str = BitConverter.ToString(ipv6_addr);
-            byte nsdu_hdl = G3.Utils.GetHandleForIpv6Addr(ipv6_str);
+            byte nsdu_hdl = CentralMaster.Utils.GetHandleForIpv6Addr(ipv6_str);
             DataTransferRequest dtr = new DataTransferRequest(to_send_b, ipv6_addr, isUDP, nsdu_hdl);
             byte[] tosendb = dtr.ToBytes();
             WriteMessage(string.Format("Send Data {0} \nwith handle 0x{1:x2} \nto node {2}", BitConverter.ToString(to_send_b).Replace("-", ""), dtr.NsduHandle, BitConverter.ToString(ipv6_addr)));
@@ -649,7 +654,7 @@ namespace G3
         public bool SendDataToNode(byte[] to_send_b, byte[] src_ipv6_addr, byte[] dest_ipv6_addr, bool isUDP)
         {
             string ipv6_str = BitConverter.ToString(dest_ipv6_addr);
-            byte nsdu_hdl = G3.Utils.GetHandleForIpv6Addr(ipv6_str);
+            byte nsdu_hdl = CentralMaster.Utils.GetHandleForIpv6Addr(ipv6_str);
             DataTransferRequest dtr = new DataTransferRequest(to_send_b, src_ipv6_addr, dest_ipv6_addr, isUDP, nsdu_hdl);
             byte[] tosendb = dtr.ToBytes();
             WriteMessage(string.Format("Send Data {0} \nwith handle 0x{1:x2} \nto node {2}", BitConverter.ToString(to_send_b).Replace("-", ""), dtr.NsduHandle, BitConverter.ToString(dest_ipv6_addr)));
@@ -732,7 +737,8 @@ namespace G3
         #endregion // send_messages
 
         #region concurrent_funcs
-        private void TransmitDataTask(object sender, DoWorkEventArgs e)
+        //private void TransmitDataTask(object sender, DoWorkEventArgs e) // when used with BackgroundWorker
+        private void TransmitDataTask()
         {
             while (!cancelTransmitQueue.IsCancellationRequested)
             {
@@ -752,38 +758,59 @@ namespace G3
             }
         }
 
-        private void StartTransmitBackgroundProcess()
+        private void StartTransmitTask()
         {
-            if (transmitWorker != null)
+            if (transmitTask != null)
             {
-                // need to stop it
-                StopTransmitBackgroundProcess();
+                StopTransmitTask();
             }
             cancelTransmitQueue = new CancellationTokenSource();
-            transmitWorker = new BackgroundWorker();
-            transmitWorker.DoWork += TransmitDataTask;
-            transmitWorker.WorkerSupportsCancellation = true;
-            transmitWorker.RunWorkerAsync();
-
+            transmitTask = Task.Factory.StartNew(() => TransmitDataTask(), cancelTransmitQueue.Token, TaskCreationOptions.AttachedToParent, TaskScheduler.Current);
         }
 
-        private void StopTransmitBackgroundProcess()
+        private void StopTransmitTask()
         {
-            cancelTransmitQueue.Cancel( true );
-            Thread.Sleep(450); // give time for loop to quit
-            transmitWorker.DoWork -= TransmitDataTask;
-            transmitWorker = null;
+            if (transmitTask != null)
+            {
+                cancelTransmitQueue.Cancel();
+                transmitTask.Wait(60*1000); // should exit within a minute
+                transmitTask = null;
+            }
         }
+
+        //private void StartTransmitBackgroundProcess()
+        //{
+        //    if (transmitWorker != null)
+        //    {
+        //        // need to stop it
+        //        StopTransmitBackgroundProcess();
+        //    }
+        //    cancelTransmitQueue = new CancellationTokenSource();
+        //    transmitWorker = new BackgroundWorker();
+        //    transmitWorker.DoWork += TransmitDataTask;
+        //    transmitWorker.WorkerSupportsCancellation = true;
+        //    transmitWorker.RunWorkerAsync();
+        //}
+
+        //private void StopTransmitBackgroundProcess()
+        //{
+        //    cancelTransmitQueue.Cancel( true );
+        //    Thread.Sleep(450); // give time for loop to quit
+        //    transmitWorker.DoWork -= TransmitDataTask;
+        //    transmitWorker = null;
+        //}
 
         #endregion // concurrent_funcs
 
         #region utility_funcs
-        private void WriteMessage(string s)
+        private void WriteMessage(string message)
         {
-            if (writeToDisplay != null)
-                writeToDisplay(s);
-            else
-                Console.WriteLine(s);
+            //if (writeToDisplay != null)
+            //    writeToDisplay(s);
+            //else
+            //{
+                DCLogger.Information(message);
+            //}
         }
 
         private void NotifyMessageReceived(byte msg_type, ushort msg_sub_type, MessageHeader msg)
@@ -794,7 +821,7 @@ namespace G3
             }
             else
             {
-                Console.WriteLine(string.Format("Received Message -> {0}", msg_type));
+                DCLogger.Information(string.Format("Received Message -> {0}", msg_type));
             }
         }
 
@@ -803,7 +830,7 @@ namespace G3
             if (receivedNodeAttach != null)
                 receivedNodeAttach(ai);
             else
-                Console.WriteLine(string.Format("to notify Attach Indication {0} received", ai.ToString()));
+                DCLogger.Information(string.Format("to notify Attach Indication {0} received", ai.ToString()));
         }
 
         private void NotifyDetachIndication(DetachIndication di)
@@ -813,7 +840,7 @@ namespace G3
                 receivedNodeDetach(di);
             }
             else
-                Console.WriteLine(string.Format("To notify detach indication {0} received", di.ToString()));
+                DCLogger.Information(string.Format("To notify detach indication {0} received", di.ToString()));
         }
 
         private void NotifyDataTransferIndication(DataTransferIndication dti)
@@ -823,7 +850,7 @@ namespace G3
                 receivedDataTransferIndication(dti);
             }
             else
-                Console.WriteLine(string.Format("To notify data transfer indication {0} received", dti.ToString()));
+                DCLogger.Information(string.Format("To notify data transfer indication {0} received", dti.ToString()));
         }
 
         private void NotifyDataTransferConfirm(DataTransferConfirm dtc)
@@ -833,7 +860,7 @@ namespace G3
                 receivedDataTransferConfirm(dtc);
             }
             else 
-                Console.WriteLine(string.Format("To notify data transfer confirm {0} received", dtc.ToString()));
+                DCLogger.Information(string.Format("To notify data transfer confirm {0} received", dtc.ToString()));
             
         }
 

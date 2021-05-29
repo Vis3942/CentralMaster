@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using LogUtils;
 
 namespace CentralMaster.json
 {
@@ -56,8 +57,7 @@ namespace CentralMaster.json
                     }
                     string responseBody = t2.Result;
                     //string responseBody = await response.Content.ReadAsStringAsync();
-                    //debug
-                    Console.WriteLine(responseBody);
+                    DCLogger.Debug(responseBody);
                     var jsonDoc = System.Text.Json.JsonDocument.Parse(responseBody);
                     var rootElement = jsonDoc.RootElement;
                     var param_names = rootElement.GetProperty("params").ToString();
@@ -70,8 +70,7 @@ namespace CentralMaster.json
                 }
                 catch (HttpRequestException e)
                 {
-                    Console.WriteLine("\nException Caught!");
-                    Console.WriteLine("Message :{0} ", e.Message);
+                    DCLogger.Error(e, "LoadDataFromAzureURL work");
                     //local_parameters.Clear();
                 }
             }
