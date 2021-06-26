@@ -1091,236 +1091,246 @@ namespace CentralMaster
 			ushort pkt_id = BitConverter.ToUInt16(msg_bytes, 2);
 			int ii;
 			DCLogger.Debug($"procrrcmd: pkt_id {pkt_id}");
-			switch (pkt_id)
+
+            try
             {
-				case ProtocolMessagesG3PLC.RS232_RESPONSE_ID:  
-				case ProtocolMessagesG3PLC.RS485_RESPONSE_ID:
-				case ProtocolMessagesG3PLC.I2C_RESPONSE_ID:
-					while (index < msg_bytes.Length)
-                    {
-						ch_num = msg_bytes[index];
-						ch_start_idx = index + 5; // channel number
-						ch_data_len = msg_bytes[index + 4];
-						if (msg_bytes[index + 3] == 0x00) // success
+                switch (pkt_id)
+                {
+                    case ProtocolMessagesG3PLC.RS232_RESPONSE_ID:
+                    case ProtocolMessagesG3PLC.RS485_RESPONSE_ID:
+                    case ProtocolMessagesG3PLC.I2C_RESPONSE_ID:
+                        while (index < msg_bytes.Length)
                         {
-							RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
-							if (tmp_rr_cmd != null)
-							{
-								List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
-								if (list_rd != null)
-								{
-									string tmp_prefix = "i2c" + tmp_rr_cmd.channel.ToString("00_");
-									if ((tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0))
-									{
-										string[] tmp_name_map = tmp_rr_cmd.data_names.Replace(" ", "").Replace(":", ",").Split(',');
-										if (tmp_name_map.Length % 2 == 0)
-										{
-											for (ii = 0; ii < tmp_name_map.Length; ii += 2)
-											{
-												data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
-											}
-										}
-									}
-
-									foreach (var tmprd in list_rd)
-                                    {
-										tmprd.Name = tmp_prefix + tmprd.Name;
-										if (cmd_event_id.Length > 0)
-										{
-											tmprd.EventId = cmd_event_id;
-										}
-									}
-									if (cmd_event_id.Length > 0)
-                                    {
-										cmd_event_id = "";
-                                    }
-									AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-									foreach (var tmp_rd in list_rd)
-									{
-										DCLogger.Debug(tmp_rd.ToString());
-									}
-								}
-							}
-						}
-						index += (ch_data_len+5+1); // 5 => cmd type, address, status, command response count, number of bytes
-                    }
-					break;
-				case ProtocolMessagesG3PLC.DALI_RESPONSE_ID:
-					DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
-					break;
-				case ProtocolMessagesG3PLC.ANALOG_INPUT_RESPONSE_ID:
-					while (index < msg_bytes.Length)
-					{
-						ch_num = msg_bytes[index];
-						ch_start_idx = index + 1;
-						ch_data_len =  4; // float 4 bytes
-						DCLogger.Debug($"procrrcmd: channel {ch_num} ch start idx {ch_start_idx}");
-						RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
-						if (tmp_rr_cmd != null)
-                        {
-							DCLogger.Debug($"procrrcmd: cmd name = {tmp_rr_cmd.command_name} dev name = {tmp_rr_cmd.device_name}");
-						}
-						else
-                        {
-							DCLogger.Debug("procrrcmd: tmp_rr_cmd is NULL");
-                        }
-						if (tmp_rr_cmd != null)
-						{
-							List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
-							if (list_rd != null)
+                            ch_num = msg_bytes[index];
+                            ch_start_idx = index + 5; // channel number
+                            ch_data_len = msg_bytes[index + 4];
+                            if (msg_bytes[index + 3] == 0x00) // success
                             {
-								DCLogger.Debug($"computed {list_rd[0].ToString()}");
-							}
-							else
-                            {
-								DCLogger.Debug($"computed list was NULL");
-
-							}
-							if (list_rd != null)
-							{
-								string tmp_prefix = "ana" + tmp_rr_cmd.channel.ToString("00_");
-
-								if ( (tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0) )
+                                RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+                                if (tmp_rr_cmd != null)
                                 {
-									string[] tmp_name_map = tmp_rr_cmd.data_names.Replace(" ", "").Replace(":", ",").Split(',');
-									if (tmp_name_map.Length % 2 == 0)
+                                    List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+                                    if (list_rd != null)
                                     {
-										for (ii=0; ii<tmp_name_map.Length; ii+= 2)
+                                        string tmp_prefix = "i2c" + tmp_rr_cmd.channel.ToString("00_");
+                                        if ((tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0))
                                         {
-											data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
+                                            string[] tmp_name_map = tmp_rr_cmd.data_names.Replace(" ", "").Replace(":", ",").Split(',');
+                                            if (tmp_name_map.Length % 2 == 0)
+                                            {
+                                                for (ii = 0; ii < tmp_name_map.Length; ii += 2)
+                                                {
+                                                    data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
+                                                }
+                                            }
                                         }
-									}
-								}
-								foreach (var tmprd in list_rd)
-								{
-									tmprd.Name = tmp_prefix + tmprd.Name;
-									if (cmd_event_id.Length > 0)
-									{
-										tmprd.EventId = cmd_event_id;
-									}
-								}
-								if (cmd_event_id.Length > 0)
-								{
-									cmd_event_id = "";
-								}
-								AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-								foreach (var tmp_rd in list_rd)
-								{
-									DCLogger.Debug(tmp_rd.ToString());
-								}
-							}
-						}
-						index += (ch_data_len+1);
-					}
-					break;
-				case ProtocolMessagesG3PLC.DIGITAL_INPUT_RESPONSE_ID:
-					while (index < msg_bytes.Length)
-					{
-						ch_num = msg_bytes[index];
-						ch_start_idx = index + 1;
-						ch_data_len = 1; // float 4 bytes
-						RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
-						if (tmp_rr_cmd != null)
-						{
-							List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
-							if (list_rd != null)
-							{
-								foreach (var tmprd in list_rd)
-								{
-									tmprd.EventId = cmd_event_id;
-								}
-								if (cmd_event_id.Length > 0)
-								{
-									cmd_event_id = "";
-								}
-								AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
-								foreach (var tmp_rd in list_rd)
-								{
-									DCLogger.Debug(tmp_rd.ToString());
-								}
-							}
-						}
-						index += (ch_data_len + 1);
-					}
-					break;
-				case ProtocolMessagesG3PLC.POWER_MEASUREMENT_RESPONSE_ID:
-					DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
-					break;
-				default:
-					DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
-					break;
-            }
-			if (process_node_data)
-            {
-				List<ResponseData> node_rd = null;
-				DCLogger.Information("Process node data and send to DataServices Layer");
-				if (node_devices.computedData != null)
-                {
-					if ( 
-						(node_devices.computedData.name != null && node_devices.computedData.name.Length > 0) && 
-						(node_devices.computedData.compute != null && node_devices.computedData.compute.Length > 0) && 
-						(node_devices.computedData.compute_values != null) )
-					{
-						var param_dict = DerivedParameters.GetParameters();
-						node_rd = (List<ResponseData>)node_devices.computedData.compute_values.Invoke(null,
-															new object[] { node_recvd_data, param_dict });
-					}
-				}
-				if (node_rd != null)
-                {
-					foreach (var tmp_rd in node_rd)
-					{
-						DCLogger.Debug(tmp_rd.ToString());
-					}
 
-					TransferData tmp_td = new TransferData();
-					tmp_td.NodeName = tmp_node_name;
-					tmp_td.UUID = node_devices.computedData.uuid;
-					tmp_td.Data = new ResponseData[node_rd.Count];
-					Array.Copy(node_rd.ToArray(), tmp_td.Data, node_rd.Count);
-					node_recvd_data.Add(tmp_td);
-					if ( (node_devices.computedData.data_names != null) &&
-						 (node_devices.computedData.data_names.Length > 0 )
-						)
-                    {
-						string[] tmp_name_map = node_devices.computedData.data_names.Replace(" ", "").Replace(":", ",").Split(',');
-						DCLogger.Debug($"node: map name length {tmp_name_map.Length}");
-						if (tmp_name_map.Length % 2 == 0)
-						{
-							for (int kk = 0; kk < tmp_name_map.Length; kk += 2)
-							{
-								DCLogger.Verbose($"{kk}: {tmp_name_map[kk]} => {tmp_name_map[kk + 1]}");
-								data_name_map.Add(tmp_name_map[kk].Trim(), tmp_name_map[kk+1].Trim());
-							}
-						}
-					}
-				}
-				else
-                {
-					DCLogger.Information("NODE RD computed data is NULL NULL NULL");
-                }
-				// MODIFY THE NAMES ACCCORDING TO data_name_map variable before pushing it to DataService
-				DCLogger.Information($"datamap length = {data_name_map.Count}");
-				foreach (TransferData tmp_td in node_recvd_data)
-                {
-					foreach (var tmp_rd in tmp_td.Data)
-                    {
-						if (data_name_map.ContainsKey(tmp_rd.Name))
+                                        foreach (var tmprd in list_rd)
+                                        {
+                                            tmprd.Name = tmp_prefix + tmprd.Name;
+                                            if (cmd_event_id.Length > 0)
+                                            {
+                                                tmprd.EventId = cmd_event_id;
+                                            }
+                                        }
+                                        if (cmd_event_id.Length > 0)
+                                        {
+                                            cmd_event_id = "";
+                                        }
+                                        AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+                                        foreach (var tmp_rd in list_rd)
+                                        {
+                                            DCLogger.Debug(tmp_rd.ToString());
+                                        }
+                                    }
+                                }
+                            }
+                            index += (ch_data_len + 5 + 1); // 5 => cmd type, address, status, command response count, number of bytes
+                        }
+                        break;
+                    case ProtocolMessagesG3PLC.DALI_RESPONSE_ID:
+                        DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+                        break;
+                    case ProtocolMessagesG3PLC.ANALOG_INPUT_RESPONSE_ID:
+                        while (index < msg_bytes.Length)
                         {
-							tmp_rd.Name = data_name_map[tmp_rd.Name];
-							// debug
-							DCLogger.Debug(tmp_rd.ToString());
+                            ch_num = msg_bytes[index];
+                            ch_start_idx = index + 1;
+                            ch_data_len = 4; // float 4 bytes
+                            DCLogger.Debug($"procrrcmd: channel {ch_num} ch start idx {ch_start_idx}");
+                            RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+                            if (tmp_rr_cmd != null)
+                            {
+                                DCLogger.Debug($"procrrcmd: cmd name = {tmp_rr_cmd.command_name} dev name = {tmp_rr_cmd.device_name}");
+                            }
+                            else
+                            {
+                                DCLogger.Debug("procrrcmd: tmp_rr_cmd is NULL");
+                            }
+                            if (tmp_rr_cmd != null)
+                            {
+                                List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+                                if (list_rd != null)
+                                {
+                                    DCLogger.Debug($"computed {list_rd[0].ToString()}");
+                                }
+                                else
+                                {
+                                    DCLogger.Debug($"computed list was NULL");
 
-						}
-					}
+                                }
+                                if (list_rd != null)
+                                {
+                                    string tmp_prefix = "ana" + tmp_rr_cmd.channel.ToString("00_");
+
+                                    if ((tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0))
+                                    {
+                                        string[] tmp_name_map = tmp_rr_cmd.data_names.Replace(" ", "").Replace(":", ",").Split(',');
+                                        if (tmp_name_map.Length % 2 == 0)
+                                        {
+                                            for (ii = 0; ii < tmp_name_map.Length; ii += 2)
+                                            {
+                                                data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
+                                            }
+                                        }
+                                    }
+                                    foreach (var tmprd in list_rd)
+                                    {
+                                        tmprd.Name = tmp_prefix + tmprd.Name;
+                                        if (cmd_event_id.Length > 0)
+                                        {
+                                            tmprd.EventId = cmd_event_id;
+                                        }
+                                    }
+                                    if (cmd_event_id.Length > 0)
+                                    {
+                                        cmd_event_id = "";
+                                    }
+                                    AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+                                    foreach (var tmp_rd in list_rd)
+                                    {
+                                        DCLogger.Debug(tmp_rd.ToString());
+                                    }
+                                }
+                            }
+                            index += (ch_data_len + 1);
+                        }
+                        break;
+                    case ProtocolMessagesG3PLC.DIGITAL_INPUT_RESPONSE_ID:
+                        while (index < msg_bytes.Length)
+                        {
+                            ch_num = msg_bytes[index];
+                            ch_start_idx = index + 1;
+                            ch_data_len = 1; // float 4 bytes
+                            RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+                            if (tmp_rr_cmd != null)
+                            {
+                                List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+                                if (list_rd != null)
+                                {
+                                    foreach (var tmprd in list_rd)
+                                    {
+                                        tmprd.EventId = cmd_event_id;
+                                    }
+                                    if (cmd_event_id.Length > 0)
+                                    {
+                                        cmd_event_id = "";
+                                    }
+                                    AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+                                    foreach (var tmp_rd in list_rd)
+                                    {
+                                        DCLogger.Debug(tmp_rd.ToString());
+                                    }
+                                }
+                            }
+                            index += (ch_data_len + 1);
+                        }
+                        break;
+                    case ProtocolMessagesG3PLC.POWER_MEASUREMENT_RESPONSE_ID:
+                        DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+                        break;
+                    default:
+                        DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
+                        break;
+                }
+                if (process_node_data)
+                {
+                    List<ResponseData> node_rd = null;
+                    DCLogger.Information("Process node data and send to DataServices Layer");
+                    if (node_devices.computedData != null)
+                    {
+                        if (
+                            (node_devices.computedData.name != null && node_devices.computedData.name.Length > 0) &&
+                            (node_devices.computedData.compute != null && node_devices.computedData.compute.Length > 0) &&
+                            (node_devices.computedData.compute_values != null))
+                        {
+                            var param_dict = DerivedParameters.GetParameters();
+                            node_rd = (List<ResponseData>)node_devices.computedData.compute_values.Invoke(null,
+                                                                new object[] { node_recvd_data, param_dict });
+                        }
+                    }
+                    if (node_rd != null)
+                    {
+                        foreach (var tmp_rd in node_rd)
+                        {
+                            DCLogger.Debug(tmp_rd.ToString());
+                        }
+
+                        TransferData tmp_td = new TransferData();
+                        tmp_td.NodeName = tmp_node_name;
+                        tmp_td.UUID = node_devices.computedData.uuid;
+                        tmp_td.Data = new ResponseData[node_rd.Count];
+                        Array.Copy(node_rd.ToArray(), tmp_td.Data, node_rd.Count);
+                        node_recvd_data.Add(tmp_td);
+                        if ((node_devices.computedData.data_names != null) &&
+                             (node_devices.computedData.data_names.Length > 0)
+                            )
+                        {
+                            string[] tmp_name_map = node_devices.computedData.data_names.Replace(" ", "").Replace(":", ",").Split(',');
+                            DCLogger.Debug($"node: map name length {tmp_name_map.Length}");
+                            if (tmp_name_map.Length % 2 == 0)
+                            {
+                                for (int kk = 0; kk < tmp_name_map.Length; kk += 2)
+                                {
+                                    DCLogger.Verbose($"{kk}: {tmp_name_map[kk]} => {tmp_name_map[kk + 1]}");
+                                    data_name_map.Add(tmp_name_map[kk].Trim(), tmp_name_map[kk + 1].Trim());
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        DCLogger.Information("NODE RD computed data is NULL NULL NULL");
+                    }
+                    // MODIFY THE NAMES ACCCORDING TO data_name_map variable before pushing it to DataService
+                    DCLogger.Information($"datamap length = {data_name_map.Count}");
+                    foreach (TransferData tmp_td in node_recvd_data)
+                    {
+                        foreach (var tmp_rd in tmp_td.Data)
+                        {
+                            if (data_name_map.ContainsKey(tmp_rd.Name))
+                            {
+                                tmp_rd.Name = data_name_map[tmp_rd.Name];
+                                // debug
+                                DCLogger.Debug(tmp_rd.ToString());
+
+                            }
+                        }
+                    }
+
+                    TransferDataList tdl = new TransferDataList();
+                    tdl.Items = node_recvd_data;
+                    string tmpstr = System.Text.Json.JsonSerializer.Serialize(tdl);
+                    DCLogger.Information("Sending to data services layer");
+                    _dc_dataservice_comms.TransmitToDataService(tmpstr);
                 }
 
-				TransferDataList tdl = new TransferDataList();
-				tdl.Items = node_recvd_data;
-				string tmpstr = System.Text.Json.JsonSerializer.Serialize(tdl);
-				DCLogger.Information("Sending to data services layer");
-				_dc_dataservice_comms.TransmitToDataService(tmpstr);
-			}
+            }
+            catch (Exception excp_prrcmd)
+            {
+				DCLogger.Error(excp_prrcmd, "ProcessASRRCommand");
+				DCLogger.Error(excp_prrcmd.StackTrace);
+            }			
 			// keep the current behavior to send data to ui
 			//SendToUserInterface(_node_ipv6addr, _common_name, _serial_num, msg_bytes);
 		}
