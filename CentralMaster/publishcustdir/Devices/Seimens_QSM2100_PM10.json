@@ -1,0 +1,23 @@
+{
+  "hwinterface": "analog",
+  "address":  0,
+  "setup_commands": [],
+  "get_commands": [
+    {
+      "name": "GetParticulateData_PM10",
+      "description": "particulate size measurement sensor",
+      "type": "",
+      "value": "",
+      "response": "ConvertData.GetParticulateData_PM10",
+      "data": [
+        {
+          "name": "pm10",
+          "description": "10 micrometer particulate size count in cubic meter",
+          "type": "float",
+          "units": "micro grams/ cubic meter"
+        }
+      ]
+    }
+  ],
+  "set_commands": []
+}

@@ -3,10 +3,10 @@
 <#
     int major    = 1;
     int minor    = 1; 
-    int build    = 1;
- 
+    int build    = 2; 
+
     string version = String.Format("{0}.{1}.{2}", major, minor, build);
-    bool previewMode = false; 
+    bool previewMode = false; //not using preview build
     if (previewMode) // Preview build
     {
         // Auto-generate the build

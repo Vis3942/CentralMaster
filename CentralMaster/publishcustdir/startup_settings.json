@@ -1,0 +1,18 @@
+{
+  "plcPortName": "/dev/ttyO1",
+  "uiConnectionName": "",
+  "StatusPipeConnectionName": "DCStatusPipe",
+  "AppTrueState": "CM-PLN-True",
+  "AppFalseState": "CM-PLN-False",
+  "PingIntervalSeconds": 2,
+  "LogTo": "file",
+  "LogLevel": "information",
+  "MaxLogFileSizeMB": 1,
+  "MaxCountFiles": 5,
+  "LogFileName": "cm_app_log.txt",
+  "AdminPort": 12195,
+  "CertificateName": "PLAN-DC" ,
+  "CmLogPath": "/home/debian/centralmaster/current",
+  "DsLogPath": "/home/debian/dcdataservices/current",
+  "SsLogPath": "/home/debian/statusservices/current"
+}

@@ -1,0 +1,56 @@
+{
+  "hwinterface": "rs232",
+  "address": 0,
+  "setup_commands": [
+    {
+      "name": "Config",
+      "description": "set rs232 communication parameters",
+      "type": "string",
+      "value": "9600,N,8,1,13,0",
+      "resp_interpret": "",
+      "data": []
+    }
+
+  ],
+  "get_commands": [
+    {
+      "name": "GetWeatherData",
+      "description": "Get temperature (tmp), wind speed (wds) and direction (wdd), relative humidity (rlh) and pressure (prs)",
+      "type": "string",
+      "value": "M0!",
+      "response": "ConvertData.Get_Weather_Data",
+      "data": [
+        {
+          "name": "wds",
+          "description": "wind speed",
+          "type": "float",
+          "units": "m/s"
+        },
+        {
+          "name": "wdd",
+          "description": "wind direction",
+          "type": "float",
+          "units": "degrees"
+        },
+        {
+          "name": "tmp",
+          "description": "temperature",
+          "type": "float",
+          "units": "degC"
+        },
+        {
+          "name": "rlh",
+          "description": "relative humidity",
+          "type": "float",
+          "units": "percent"
+        },
+        {
+          "name": "prs",
+          "description": "relative pressure",
+          "type": "float",
+          "units": "hPa"
+        }
+      ]
+    }
+  ]
+}
