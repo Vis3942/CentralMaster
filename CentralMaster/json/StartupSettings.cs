@@ -26,5 +26,7 @@ namespace CentralMaster.json
         public string CmLogPath { get; set; }
         public string DsLogPath { get; set; }
         public string SsLogPath { get; set; }
+
+        public bool PlcChangedToSerial { get; set; }
     }
 }

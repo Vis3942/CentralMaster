@@ -178,6 +178,7 @@ namespace CentralMaster
         private Task transmitTask = null;
 
         private const int RECEIVE_MESSAGE_CHECK_TIMEOUT_MS = 25;
+        private bool plc_changed_to_serial = false;
 
         #endregion vars
 
@@ -213,6 +214,10 @@ namespace CentralMaster
 
         #endregion property
 
+        public HostMessages()
+        {
+            plc_changed_to_serial = AppOptions.GetAppOptions.PlcChangedToSerial;
+        }
         private void serialDataReceivedEvent(byte[] received)
         {
             DCLogger.Verbose(string.Format("recv -> {0}", received.Length));
@@ -381,9 +386,46 @@ namespace CentralMaster
                     }
                     else
                     {
-                        // it is an attach confirmation
-                        AttachConfirm ac = new AttachConfirm(message_bytes);
-                        NotifyMessageReceived(message_bytes[0], 0, ac);
+                        if (plc_changed_to_serial)
+                        {
+                            if ( (message_bytes[2] == 8) && (message_bytes[3] == 0) )
+                            {
+                                //Received attach request (support for direct serial comm between node and DC)
+                                System.Threading.Thread.Sleep(250);
+                                // send attach confirm to original device
+
+                                AttachRequest ar = new AttachRequest(message_bytes);
+                                // use rnd nw addr between 0x00 and 0xfff7
+                                Random rand = new Random(System.DateTime.Now.Millisecond);
+                                int rval = rand.Next(0x0005, 0xfff7);
+                                int p_id = rand.Next(0x1101, 0xFFFE);
+                                AttachConfirm ac = new AttachConfirm(0, rval, p_id);
+                                byte[] tosendb = ac.ToBytes();
+                                WriteMessage($"Sent Attach Confirm to Node: nw addr {rval}, pan id {p_id}.");
+                                SafeSendMessageOnSerial(tosendb);
+
+                                System.Threading.Thread.Sleep(250);
+                                // send attach indidation to the node
+                                // network address FE 80 00 00 00 00 00 00  75 42   00 FF FE  00 00 02
+                                //                                         [pan id]          [node number assigned]
+                                int n_num_id = rand.Next(1, 9);
+                                byte[] a_prefix = { 0xFE, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+                                byte[] a_suffix = { 0x00, 0x00, 0x00, 0xFF, 0xFE, 0x00, 0x00, (byte)n_num_id };
+                                a_suffix[0] = (byte)((p_id & 0xFF00) >> 8);
+                                a_suffix[1] = (byte)(p_id & 0x00FF);
+                                n_num_id = rand.Next(1, 14);
+                                byte[] ext_address = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, (byte)n_num_id };
+                                AttachIndication ai2 = new AttachIndication(a_prefix, a_suffix, ext_address);
+                                NotifyAttachIndication(ai2);
+                            }
+
+                        }
+                        else
+                        {
+                            // it is an attach confirmation
+                            AttachConfirm ac = new AttachConfirm(message_bytes);
+                            NotifyMessageReceived(message_bytes[0], 0, ac);
+                        }
                     }
                     break;
 
@@ -401,17 +443,41 @@ namespace CentralMaster
                     break;
 
                 case (byte)CommandTypes.DATA_TRANSFER:
-                    // if payload len is 8 it is a data transfer confirmation else it is a data indication
-                    if ((message_bytes[2] == 8) && (message_bytes[3] == 0))
+                    if (plc_changed_to_serial)
                     {
-                        DataTransferConfirm dtc = new DataTransferConfirm(message_bytes);
-                        NotifyDataTransferConfirm(dtc);
-                        //NotifyMessageReceived(message_bytes[0], 0, dtc);
+                        // any data_transfer packet received will be a DataTransferRequest
+                        DataTransferRequest dtr_remote = new DataTransferRequest(message_bytes);
+                        System.Threading.Thread.Sleep(250);
+                        DataTransferConfirm dtc_remote = new DataTransferConfirm(dtr_remote.NsduHandle, 0);
+                        // to transmit datatrasfer confirm to remote node over serial
+                        byte[] tosendb = dtc_remote.ToBytes();
+                        if (tosendb != null)
+                        {
+                            WriteMessage("PLC over serial: Send Data Confirm to Remote Node");
+                            SafeSendMessageOnSerial(tosendb);
+                        }
+                        else
+                        {
+                            WriteMessage("PLC over serial: Failed to send Data Confirm to Remote Node");
+                        }
+                        System.Threading.Thread.Sleep(250);
+                        DataTransferIndication dti_local = new DataTransferIndication(0, dtr_remote.SecurityEnabled, 0, DataTransferRequest.GetPayload(message_bytes));
+                        NotifyDataTransferIndication(dti_local);
                     }
                     else
                     {
-                        DataTransferIndication dti = new DataTransferIndication(message_bytes);
-                        NotifyDataTransferIndication(dti);
+                        // if payload len is 8 it is a data transfer confirmation else it is a data indication
+                        if ((message_bytes[2] == 8) && (message_bytes[3] == 0))
+                        {
+                            DataTransferConfirm dtc = new DataTransferConfirm(message_bytes);
+                            NotifyDataTransferConfirm(dtc);
+                            //NotifyMessageReceived(message_bytes[0], 0, dtc);
+                        }
+                        else
+                        {
+                            DataTransferIndication dti = new DataTransferIndication(message_bytes);
+                            NotifyDataTransferIndication(dti);
+                        }
                     }
                     break;
 
@@ -646,8 +712,27 @@ namespace CentralMaster
             byte nsdu_hdl = CentralMaster.Utils.GetHandleForIpv6Addr(ipv6_str);
             DataTransferRequest dtr = new DataTransferRequest(to_send_b, ipv6_addr, isUDP, nsdu_hdl);
             byte[] tosendb = dtr.ToBytes();
-            WriteMessage(string.Format("Send Data {0} \nwith handle 0x{1:x2} \nto node {2}", BitConverter.ToString(to_send_b).Replace("-", ""), dtr.NsduHandle, BitConverter.ToString(ipv6_addr)));
-            SafeSendMessageOnSerial(tosendb);
+            if (!plc_changed_to_serial)
+            {
+                // original plc based code
+                WriteMessage(string.Format("Send Data {0} \nwith handle 0x{1:x2} \nto node {2}", BitConverter.ToString(to_send_b).Replace("-", ""), dtr.NsduHandle, BitConverter.ToString(ipv6_addr)));
+                SafeSendMessageOnSerial(tosendb);
+            }
+            else
+            {
+                System.Threading.Thread.Sleep(250);
+                DataTransferConfirm dtc_local = new DataTransferConfirm(nsdu_hdl, 0);
+                NotifyDataTransferConfirm(dtc_local);
+                WriteMessage("PLC over serial: Sent Data Transfer confirm to local node");
+                System.Threading.Thread.Sleep(250);
+                DataTransferIndication dti_remote = new DataTransferIndication(0, dtr.SecurityEnabled, 0, DataTransferRequest.GetPayload(tosendb));
+                byte[] tosendb_remote = dti_remote.ToBytes();
+                if (tosendb_remote != null)
+                {
+                    SafeSendMessageOnSerial(tosendb_remote);
+                    WriteMessage("PLC over serial: Sent DataTransferIndication to Remote Node");
+                }
+            }
             return true;
         }
 
@@ -2519,6 +2604,30 @@ namespace CentralMaster
             ComputeBytes();
         }
 
+        public AttachRequest(byte[] data)
+        {
+            FromBytes(data);
+        }
+
+        private void FromBytes(byte[] data)
+        {
+            // payload length is 4 + header is 8
+            if (data.Length != 12)
+                throw new Exception(string.Format("Invalid Attach Request received, expected 12 bytes, got only {0} bytes", data.Length));
+            message_type = data[0];
+            options = data[1];
+            payload_length_lsb = data[2];
+            payload_length_msb = data[3];
+            header_crc16[0] = data[4];
+            header_crc16[1] = data[5];
+            payload_crc16[0] = data[6];
+            payload_crc16[1] = data[7];
+            pan_id = BitConverter.ToUInt16(data, 8);
+            lba_addr = BitConverter.ToUInt16(data, 10);
+            bytes = new byte[data.Length];
+            Array.Copy(data, bytes, data.Length);
+        }
+
         private void ComputeBytes()
         {
             bytes = new byte[8 + 4];
@@ -2570,6 +2679,51 @@ namespace CentralMaster
         public ushort nw_addr;
         public ushort pan_id;
 
+        public AttachConfirm(int status_val, int network_addr_val, int pan_id_val)
+        {
+            message_type = (byte)CommandTypes.ATTACH;
+            // ORG bit is 1, RPY bit is 0, seq is 0
+            options = 0x80; // 1000 0000
+            payload_length_lsb = (byte)10;
+            payload_length_msb = (byte)0;
+            payload_crc16[0] = 0;
+            payload_crc16[1] = 0;
+            status = (ushort)status_val;
+            nw_addr = (ushort)network_addr_val;
+            pan_id = (ushort)pan_id_val;
+            ComputeBytes();
+        }
+
+        private void ComputeBytes()
+        {
+            bytes = new byte[8 + 6];
+            bytes[0] = message_type;
+            bytes[1] = options;
+            bytes[2] = payload_length_lsb;
+            bytes[3] = payload_length_msb;
+            ushort crc16 = MessageHeader.ComputeCRC16(bytes, 0, 4);
+            //ushort testcrs16 = GenCrc16(bytes, 4);
+            header_crc16[0] = (byte)(crc16 & 0xFF);
+            header_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[4] = header_crc16[0];
+            bytes[5] = header_crc16[1];
+            byte[] tmpu_b = BitConverter.GetBytes(status);
+            bytes[8] = tmpu_b[0];
+            bytes[9] = tmpu_b[1];
+            tmpu_b = BitConverter.GetBytes(nw_addr);
+            bytes[10] = tmpu_b[0];
+            bytes[11] = tmpu_b[1];
+            tmpu_b = BitConverter.GetBytes(pan_id);
+            bytes[10] = tmpu_b[0];
+            bytes[11] = tmpu_b[1];
+            crc16 = MessageHeader.ComputeCRC16(bytes, 8, 6);
+            payload_crc16[0] = (byte)(crc16 & 0xFF);
+            payload_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[6] = payload_crc16[0];
+            bytes[7] = payload_crc16[1];
+            byte_arr_computed = true;
+        }
+
         public AttachConfirm(byte[] message_bytes)
         {
             FromBytes(message_bytes);
@@ -2594,6 +2748,14 @@ namespace CentralMaster
             bytes = new byte[data.Length];
             Array.Copy(data, bytes, data.Length);
         }
+        public byte[] ToBytes()
+        {
+            if (!byte_arr_computed)
+            {
+                ComputeBytes();
+            }
+            return bytes;
+        }
 
         public override string ToString()
         {
@@ -2611,6 +2773,18 @@ namespace CentralMaster
         public byte[] extended_addr; // 8 bytes
         public byte capability_info;
         public byte reserved;
+
+        public AttachIndication(byte[] addr_prefix, byte[] addr_suffix, byte[] ext_addr)
+        {
+            ipv6_addr_prefix = new byte[8];
+            System.Array.Copy(addr_prefix, ipv6_addr_prefix, 8);
+            ipv6_addr_suffix = new byte[8];
+            System.Array.Copy(addr_suffix, ipv6_addr_suffix, 8);
+            extended_addr = new byte[8];
+            System.Array.Copy(ext_addr, extended_addr, 8);
+            capability_info = 0;
+            reserved = 0;
+        }
 
         public AttachIndication(byte[] message_bytes)
         {
@@ -2915,6 +3089,55 @@ namespace CentralMaster
             Array.Copy(data, bytes, data.Length);
         }
 
+        public DataTransferIndication(byte l_link_quality_ind, bool l_security_enabled, int l_phase, byte[] payload)
+        {
+            // CFM flag will always be zero
+            message_type = (byte)CommandTypes.DATA_TRANSFER;
+            // ORG bit is 1, RPY bit is 0, seq is 0
+            options = 0x80; // 1000 0000
+
+            payload_length_lsb = (byte)0; // cannot compute length now...
+            payload_length_msb = (byte)0;
+            payload_crc16[0] = 0;
+            payload_crc16[1] = 0;
+            security_enabled = l_security_enabled;
+            phase = (byte)(l_phase & 0x0F);
+            link_quality = l_link_quality_ind;
+            bytes = new byte[8 + 2 + payload.Length ]; // generating from datarequest, so padding is already calculated
+            bytes[0] = message_type;
+            bytes[1] = options;
+            payload_length_lsb = (byte)((6+payload.Length) & 0xFF);
+            payload_length_msb = (byte)(((6+payload.Length) & 0xFF00) >> 8);
+            bytes[2] = payload_length_lsb;
+            bytes[3] = payload_length_msb;
+            ushort crc16 = MessageHeader.ComputeCRC16(bytes, 0, 4);
+            header_crc16[0] = (byte)(crc16 & 0xFF);
+            header_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[4] = header_crc16[0];
+            bytes[5] = header_crc16[1];
+            bytes[8] = link_quality;
+            bytes[9] = (byte)(security_enabled ? 1 : 0);
+            bytes[9] = (byte)(bytes[9] + (byte)(phase << 3));
+            Array.Copy(payload, 0, bytes, 10, payload.Length);
+            crc16 = MessageHeader.ComputeCRC16(bytes, 8, 2 + payload.Length);
+            payload_crc16[0] = (byte)(crc16 & 0xFF);
+            payload_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[6] = payload_crc16[0];
+            bytes[7] = payload_crc16[1];
+            byte_arr_computed = true;
+        }
+
+        public byte[] ToBytes()
+        {
+            if (!byte_arr_computed)
+            {
+                return null;
+            }
+            else
+            {
+                return bytes;
+            }
+        }
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
@@ -2962,6 +3185,11 @@ namespace CentralMaster
             get {
                 return nsdu_handle;
             }
+        }
+
+        public bool SecurityEnabled
+        {
+            get { return security_enabled; }
         }
  
         public DataTransferRequest(byte[] data_to_send_b, byte[] send_ipv6_addr, bool isUDP, byte loc_nsdu_handle)
@@ -3094,6 +3322,10 @@ namespace CentralMaster
             ComputeBytes();
         }
 
+        public DataTransferRequest(byte[] data)
+        {
+            FromBytes(data);
+        }
 
         private void ComputeBytes()
         {
@@ -3161,6 +3393,99 @@ namespace CentralMaster
             return sb.ToString();
         }
 
+        //public  void FromBytes(byte[] data)
+        //{
+        //    message_type = data[0];
+        //    options = data[1];
+        //    payload_length_lsb = data[2];
+        //    payload_length_msb = data[3];
+        //    header_crc16[0] = data[4];
+        //    header_crc16[1] = data[5];
+        //    payload_crc16[0] = data[6];
+        //    payload_crc16[1] = data[7];
+        //    nsdu_handle = data[8];
+        //    discovery_route_enabled = ((data[9] & 0x01) == 1) ? true : false;
+        //    security_enabled = ((data[9] & 0x02) == 0x02) ? true : false;
+        //    qos_normal_priority = ((data[9] & 0x04) == 0x04) ? true : false;
+        //}
+
+        private void FromBytes(byte[] data)
+        {
+            message_type = data[0];
+            options = data[1];
+            payload_length_lsb = data[2];
+            payload_length_msb = data[3];
+            int payload_len = BitConverter.ToUInt16(data, 2);
+            // payload length is 8 + header is 8
+            if (data.Length < payload_len + 4)
+            {
+                throw new Exception(string.Format("Invalid Data Request received, expected at least {0} bytes, got {1} bytes", payload_len + 4, data.Length));
+            }
+
+            header_crc16[0] = data[4];
+            header_crc16[1] = data[5];
+            payload_crc16[0] = data[6];
+            payload_crc16[1] = data[7];
+            nsdu_handle = data[8];
+            if ((data[9] & 0x02) == 0x02)
+            {
+                security_enabled = true;
+            }
+            else
+            {
+                security_enabled = false;
+            }
+            if ((data[9] & 0x01) == 0x01)
+            {
+                discovery_route_enabled = true;
+            }
+            else
+            {
+                discovery_route_enabled = false;
+            }
+            if ((data[9] & 0x04) == 0x04)
+            {
+                qos_normal_priority = true;
+            }
+            else
+            {
+                qos_normal_priority = false;
+            }
+            // ipv6 frame sent here; so get the frame and then the data
+            int ipv6_bytes_used = 0;
+            ipv6Header = Ipv6Header.Create(data, 10, ref ipv6_bytes_used);
+
+            int tmp_bytes_used = 0;
+            int actual_data_len;
+            if (ipv6Header.NextHeader == 17)
+            {
+                udpHeader = UdpHeader.Create(data, 10 + ipv6_bytes_used, ref tmp_bytes_used);
+                actual_data_len = udpHeader.Length - 8;
+            }
+            else
+            {
+                tcpHeader = TcpHeader.Create(data, 10 + ipv6_bytes_used, ref tmp_bytes_used);
+                ushort tcp_pkt_len = (ushort)System.Net.IPAddress.HostToNetworkOrder((short)ipv6Header.PayloadLength);
+                actual_data_len = tcp_pkt_len - tmp_bytes_used;
+            }
+
+            if (actual_data_len <= 0)
+            {
+                throw new Exception(string.Format("No data in TCP/UDP packet in Data Indication received"));
+            }
+            send_bytes = new byte[actual_data_len];
+            Array.Copy(data, 10 + ipv6_bytes_used + tmp_bytes_used, send_bytes, 0, actual_data_len);
+            bytes = new byte[data.Length];
+            Array.Copy(data, bytes, data.Length);
+        }
+
+        public static byte[] GetPayload(byte[] data)
+        {
+            byte[] payload_b = new byte[data.Length - 10];
+            Array.Copy(data, 10, payload_b, 0, payload_b.Length);
+            return payload_b;
+        }
+
     }
 
     public class DataTransferConfirm : MessageHeader
@@ -3169,10 +3494,57 @@ namespace CentralMaster
         public bool confirmation_flag;
         public ushort status;
 
+
+
         public DataTransferConfirm(byte[] message_bytes)
         {
             FromBytes(message_bytes);
+        }
 
+        public DataTransferConfirm(byte l_nsdu_handle, byte l_status)
+        {
+            // CFM flag will always be zero
+            message_type = (byte)CommandTypes.DATA_TRANSFER;
+            options = 0x80;
+            nsdu_handle = l_nsdu_handle;
+            status = l_status;
+            payload_length_lsb = (byte)0; // cannot compute length now...
+            payload_length_msb = (byte)0;
+            payload_crc16[0] = 0;
+            payload_crc16[1] = 0;
+            bytes = new byte[8 + 3]; 
+            bytes[0] = message_type;
+            bytes[1] = options;
+            payload_length_lsb = (byte)((7) & 0xFF);
+            payload_length_msb = (byte)(((7) & 0xFF00) >> 8);
+            bytes[2] = payload_length_lsb;
+            bytes[3] = payload_length_msb;
+            ushort crc16 = MessageHeader.ComputeCRC16(bytes, 0, 4);
+            header_crc16[0] = (byte)(crc16 & 0xFF);
+            header_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[4] = header_crc16[0];
+            bytes[5] = header_crc16[1];
+            bytes[8] = nsdu_handle;
+            bytes[9] = (byte)(0x80);
+            bytes[10] = (byte)status;
+            crc16 = MessageHeader.ComputeCRC16(bytes, 8, 3 );
+            payload_crc16[0] = (byte)(crc16 & 0xFF);
+            payload_crc16[1] = (byte)((crc16 & 0xFF00) >> 8);
+            bytes[6] = payload_crc16[0];
+            bytes[7] = payload_crc16[1];
+            byte_arr_computed = true;
+        }
+
+        public byte[] ToBytes()
+        {
+            if (!byte_arr_computed)
+            {
+                return null;
+            }
+            else
+            {
+                return bytes;
+            }
         }
 
         private void FromBytes(byte[] data)

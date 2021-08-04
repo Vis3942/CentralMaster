@@ -14,5 +14,6 @@
   "CertificateName": "PLAN-DC" ,
   "CmLogPath": "/home/debian/centralmaster/current",
   "DsLogPath": "/home/debian/dcdataservices/current",
-  "SsLogPath": "/home/debian/statusservices/current"
+  "SsLogPath": "/home/debian/statusservices/current",
+  "PlcChangedToSerial": true
 }

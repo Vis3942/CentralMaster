@@ -17,7 +17,7 @@ namespace CentralMaster
 	{
 		#region vars
 		private string plc_port_name = "";
-		private string ui_connection_name = "";
+        private string ui_connection_name = "";
 		private bool app_started = false;
 		private Communications.SerialComm serial_port = null;
         readonly CentralMaster.HostMessages host_messaging = new CentralMaster.HostMessages();
