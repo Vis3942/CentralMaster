@@ -11,8 +11,10 @@
   "MaxCountFiles": 5,
   "LogFileName": "cm_app_log.txt",
   "AdminPort": 12195,
-  "CertificateName": "PLAN-DC" ,
+  "CertificateName": "PLAN-DC",
   "CmLogPath": "/home/debian/centralmaster/current",
   "DsLogPath": "/home/debian/dcdataservices/current",
-  "SsLogPath": "/home/debian/statusservices/current"
+  "SsLogPath": "/home/debian/statusservices/current",
+  "SupportingService": "AzureTable",
+  "ParametersDirectory": "/var/tmp"
 }

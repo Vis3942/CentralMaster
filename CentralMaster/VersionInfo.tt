@@ -3,7 +3,7 @@
 <#
     int major    = 1;
     int minor    = 1; 
-    int build    = 2; 
+    int build    = 3; 
 
     string version = String.Format("{0}.{1}.{2}", major, minor, build);
     bool previewMode = false; //not using preview build
