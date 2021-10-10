@@ -29,5 +29,6 @@ namespace CentralMaster.json
 
         public string SupportingService { get; set; }
         public string ParametersDirectory { get; set; }
+        public string[] ProductNames { get; set; }
     }
 }

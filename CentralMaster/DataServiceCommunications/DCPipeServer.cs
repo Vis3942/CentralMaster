@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UtilsLibrary;
 using LogUtils;
+using System.Threading.Tasks.Dataflow;
 
 namespace CentralMaster.DataServiceCommunications
 {
@@ -22,6 +23,8 @@ namespace CentralMaster.DataServiceCommunications
         private StreamReader sreader = null;
         private CancellationTokenSource pipeServerTokenSrc = new CancellationTokenSource();
         private Random srand = new Random(DateTime.Now.Millisecond);
+        private BufferBlock<string> buffer = new BufferBlock<string>();
+        private const int MAX_BUFFER_SIZE = 1024;
         #endregion // vars
 
         #region property
@@ -92,13 +95,29 @@ namespace CentralMaster.DataServiceCommunications
                     sreader = new StreamReader(serverPipe);
                     try
                     {
+                        var task_wr = Task.Run(async () =>
+                        {
+                            while ((!pipeServerTokenSrc.IsCancellationRequested) && (await buffer.OutputAvailableAsync()))
+                            {
+                                string tmp_message = await buffer.ReceiveAsync<string>(pipeServerTokenSrc.Token);
+                                await swriter.WriteLineAsync(tmp_message);
+                            }
+                        });
                         var task = Task.Run(() => ReadDataFromPipe(pipeServerTokenSrc.Token), pipeServerTokenSrc.Token);
                         if (task.IsFaulted)
                         {
                             break;
                         }
-                        task.Wait();
-                        DCLogger.Information("read task completed");
+                        //task.Wait();
+                        Task.WaitAny(task, task_wr);
+                        if (task.IsCompleted)
+                        {
+                            DCLogger.Information("read task completed");
+                        }
+                        if (task_wr.IsCompleted)
+                        {
+                            DCLogger.Information("write task completed");
+                        }
 
                         if ( (serverPipe != null) && (serverPipe.IsConnected) )
                         {
@@ -212,7 +231,12 @@ namespace CentralMaster.DataServiceCommunications
         {
             if (((serverPipe != null) && (serverPipe.IsConnected)) && (swriter != null))
             {
-                swriter.WriteLine(message);
+                while (buffer.Count > MAX_BUFFER_SIZE)
+                {
+                    _ = buffer.ReceiveAsync();
+                }
+                buffer.SendAsync(message);
+                //swriter.WriteLine(message);
             }
             else
             {

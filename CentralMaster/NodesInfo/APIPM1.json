@@ -1,0 +1,18 @@
+{
+  "devices": [
+    {
+      "uuid": "b28d30b4-b91c-4d79-aa11-9a32c48bfcac",
+      "device": "PowerMeasurement",
+      "channel": 0,
+      "config_command": "",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "GetPowerData",
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "ComputedData": {}
+}

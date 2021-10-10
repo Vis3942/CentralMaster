@@ -16,5 +16,6 @@
   "DsLogPath": "/home/debian/dcdataservices/current",
   "SsLogPath": "/home/debian/statusservices/current",
   "SupportingService": "AzureTable",
-  "ParametersDirectory": "/var/tmp"
+  "ParametersDirectory": "/var/tmp",
+  "ProductNames": [ "APIPM1" ]
 }

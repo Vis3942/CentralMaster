@@ -1480,6 +1480,9 @@ namespace CentralMaster
         /// <param name="current"></param>
         /// <param name="power_fac"></param>
         /// <param name="line_freq"></param>
+        /// <param name="active_power"></param>
+        /// <param name="on_off"></param>
+        /// <param name="brightness_pc"></param>
         /// <returns>
         /// returns 0xFFFFF 
         ///     -> unsupported packet ids
@@ -1487,7 +1490,8 @@ namespace CentralMaster
         /// else returns length of packet (details populated)
         /// </returns>
         public static ushort AddToPacketPowerMeasResponse(ref byte[] pkt, int pkt_size, int channel_number, 
-            float voltage, float current, float power_fac, float line_freq)
+            float voltage, float current, float power_fac, float line_freq, float active_power, 
+            byte on_off, byte brightness_pc)
         {
             // it is analog in response_packet
             if ((pkt[2] == (byte)POWER_MEASUREMENT_RESPONSE_ID) && (pkt[3] == (byte)(POWER_MEASUREMENT_RESPONSE_ID >> 8)))
@@ -1510,8 +1514,11 @@ namespace CentralMaster
                 Array.Copy(tmp_b, 0, pkt, tmp_curr_len + 9, 4);
                 tmp_b = BitConverter.GetBytes(line_freq);
                 Array.Copy(tmp_b, 0, pkt, tmp_curr_len + 13, 4);
-
-                tmp_curr_len += (1 + 4*4);  // channel number -> 1 byte, 4 bytes float
+                tmp_b = BitConverter.GetBytes(active_power);
+                Array.Copy(tmp_b, 0, pkt, tmp_curr_len + 17, 4);
+                pkt[tmp_curr_len + 21] = on_off;
+                pkt[tmp_curr_len + 22] = brightness_pc;
+                tmp_curr_len += (1 + 5*4 + 2);  // channel number -> 1 byte, 5 float vals => each 4 bytes, 2 byte vals => 1 byte each 
                 pkt[0] = (byte)(tmp_curr_len);
                 pkt[1] = (byte)((tmp_curr_len) >> 8);
                 return (ushort)tmp_curr_len;

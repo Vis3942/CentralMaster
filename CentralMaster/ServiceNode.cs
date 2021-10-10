@@ -1247,8 +1247,45 @@ namespace CentralMaster
                         }
                         break;
                     case ProtocolMessagesG3PLC.POWER_MEASUREMENT_RESPONSE_ID:
-                        DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
-                        break;
+						//DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+						while (index < msg_bytes.Length)
+						{
+							ch_num = msg_bytes[index];
+							ch_start_idx = index + 1;
+							ch_data_len = 22; // 5 float values: 4 bytes each + 2 uint8 values
+							RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+							if (tmp_rr_cmd != null)
+							{
+								List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+								if (list_rd != null)
+								{
+									foreach (var tmprd in list_rd)
+									{
+										tmprd.EventId = cmd_event_id;
+									}
+									if (cmd_event_id.Length > 0)
+									{
+										cmd_event_id = "";
+									}
+									AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+									foreach (var tmp_rd in list_rd)
+									{
+										DCLogger.Debug(tmp_rd.ToString());
+									}
+								}
+							}
+                            else
+                            {
+								DCLogger.Debug($"Failed to find channel {ch_num}");
+								foreach (RRCommand rrcmd in loc_rr_cmd_list)
+                                {
+									DCLogger.Debug($"cmd: {rrcmd.command_name}, dev name {rrcmd.device_name}, channel {rrcmd.channel}");
+                                }
+
+                            }
+							index += (ch_data_len + 1);
+						}
+						break;
                     default:
                         DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
                         break;
@@ -1536,9 +1573,27 @@ namespace CentralMaster
 
 		private void LoadDevicesFromJsonFile()
         {
-			string node_cmd_filename = _common_name + "_" + _serial_num + ".json";
+			string node_cmd_filename;
+			bool product_dev;
+			if (AppOptions.GetAppOptions.ProductNames.Contains(_common_name))
+            {
+				node_cmd_filename = _common_name + ".json";
+				product_dev = true;
+            }
+			else
+            {
+				node_cmd_filename = _common_name + "_" + _serial_num + ".json";
+				product_dev = false;
+			}
 			string node_fname = System.IO.Path.Combine("NodesInfo", node_cmd_filename);
-			DCLogger.Information($"Loading devices for node -> {node_fname}");
+			if (product_dev)
+            {
+				DCLogger.Information($"Loading product -> {_common_name} with serial num -> {_serial_num}, devices from {node_fname}");
+			}
+			else
+            {
+				DCLogger.Information($"Loading devices for node -> {node_fname}");
+			}
 			if (System.IO.File.Exists(node_fname))
 			{
 				string json_str = System.IO.File.ReadAllText(node_fname);
@@ -1833,7 +1888,18 @@ namespace CentralMaster
 			}
 			else if (hw_interface_type.ToLower().Equals("powermeasurement"))
 			{
-				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
+				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length);
+				foreach (var rr_cmd in loc_rr_cmd_list)
+				{
+					//JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
+						rr_cmd.channel);
+					if (pkt_len == 0xFFFF)
+					{
+						DCLogger.Error($"PowerMeasurement: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						return false;
+					}
+				}
 			}
 			else if (hw_interface_type.ToLower().Equals("dali"))
 			{
