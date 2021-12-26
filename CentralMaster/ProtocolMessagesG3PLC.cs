@@ -55,6 +55,8 @@ namespace CentralMaster
         public const ushort PROTOCOL_CONFIRM_RESPONSE_ID = 0x002E;
         public const ushort I2C_COMMAND_ID = 0x002F;
         public const ushort I2C_RESPONSE_ID = 0x0030;
+        public const ushort IAQ_REQUEST_ID = 0x0031;
+        public const ushort IAQ_RESPONSE_ID = 0x0032;
 
 
 
@@ -859,7 +861,8 @@ namespace CentralMaster
             // RS232_COMMAND_ID, RS485_COMMAND_ID, DALI_COMMAND_ID, RS232_RESPONSE_ID, RS485_RESPONSE_ID, DALI_RESPONSE_ID,
             // DIGITAL_INPUT_REQUEST_ID , DIGITAL_INPUT_RESPONSE_ID, DIGITAL_OUTPUT_COMMAND_ID, DIGITAL_OUTPUT_RESPONSE_ID
             // POWER_MEASUREMENT_REQUEST_ID, POWER_MEASUREMENT_RESPONSE_ID
-            // ANALOG_INPUT_REQUEST_ID, ANALOG_INPUT_RESPONSE_ID, ANALOG_OUTPUT_COMMAND_ID, ANALOG_OUTPUT_RESPONSE_ID
+            // ANALOG_INPUT_REQUEST_ID, ANALOG_INPUT_RESPONSE_ID, ANALOG_OUTPUT_COMMAND_ID, ANALOG_OUTPUT_RESPONSE_ID,
+            // IAQ_REQUEST_ID
             switch (pkt_id)
             {
                 case RS232_COMMAND_ID:
@@ -879,6 +882,7 @@ namespace CentralMaster
                 case ANALOG_OUTPUT_COMMAND_ID:
                 case ANALOG_OUTPUT_RESPONSE_ID:
                 case I2C_COMMAND_ID:
+                case IAQ_REQUEST_ID:
                     supp_pkt_id = true;
                     break;
                 default:
@@ -1139,7 +1143,7 @@ namespace CentralMaster
         ///     -> insufficient size for packet
         /// else returns length of packet (details populated)
         /// </returns>
-        public static ushort AddToPacketDigitalAnalogPowerMeasRequest(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number)
+        public static ushort AddToPacketDigitalAnalogPowerMeasIAQRequest(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number)
         {
             // supported packet types in this function
             // "digital_in_req", "analog_in_req", "power_meas_req"
@@ -1160,6 +1164,12 @@ namespace CentralMaster
                     break;
                 case POWER_MEASUREMENT_REQUEST_ID:
                     if ((pkt[2] == (byte)POWER_MEASUREMENT_REQUEST_ID) && (pkt[3] == (byte)(POWER_MEASUREMENT_REQUEST_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                case IAQ_REQUEST_ID:
+                    if ((pkt[2] == (byte)IAQ_REQUEST_ID) && (pkt[3] == (byte)(IAQ_REQUEST_ID >> 8)))
                     {
                         is_correct_type = true;
                     }

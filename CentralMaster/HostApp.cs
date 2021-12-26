@@ -366,7 +366,124 @@ namespace CentralMaster
             return tmpi;
         }
 
-        private void LoadSettings()
+		private void LoadSettings()
+        {
+			StartupSettings settings = AppOptions.GetAppOptions;
+			rd_pan_id = (ushort)ConvertToInt(settings.PanId);
+			string[] tmp_addr_strs = settings.XAddress.Split(new char[] { ',' });
+			List<byte> tmp_b = new List<byte>();
+			int tmpj;
+			foreach (string str in tmp_addr_strs)
+			{
+				if (str.Trim().Length > 0)
+				{
+					tmpj = ConvertToInt(str.Trim());
+					tmp_b.Add((byte)tmpj);
+				}
+			}
+			if (tmp_b.Count == 8)
+			{
+				rd_xaddress = tmp_b.ToArray();
+			}
+			else
+            {
+				// default value
+				rd_xaddress = new byte[default_xadd_base.Length];
+				Array.Copy(default_xadd_base, rd_xaddress, default_xadd_base.Length);
+			}
+
+			string[] tmp_addr_strs2 = settings.PSK.Split(new char[] { ',' });
+			List<byte> tmp_b2 = new List<byte>();
+			int tmpj2;
+			foreach (string str in tmp_addr_strs2)
+			{
+				if (str.Trim().Length > 0)
+				{
+					tmpj2 = ConvertToInt(str.Trim());
+					tmp_b2.Add((byte)tmpj2);
+				}
+			}
+			if (tmp_b2.Count == 16)
+			{
+				rd_psk = tmp_b2.ToArray();
+			}
+			else
+            {
+				// default value
+				rd_psk = new byte[default_psk.Length];
+				Array.Copy(default_psk, rd_psk, default_psk.Length);
+			}
+
+			rd_tone_maskname = settings.ToneMaskName;
+
+			string[] tmp_addr_strs3 = settings.ToneMaskValues.Split(new char[] { ',' });
+			List<byte> tmp_b3 = new List<byte>();
+			int tmpj3;
+			foreach (string str in tmp_addr_strs3)
+			{
+				if (str.Trim().Length > 0)
+				{
+					tmpj3 = ConvertToInt(str.Trim());
+					tmp_b3.Add((byte)tmpj3);
+				}
+			}
+			if (tmp_b3.Count == 14)
+			{
+				rd_tone_maskvalues = tmp_b3.ToArray();
+			}
+
+			rd_vendor_id = settings.VendorId;
+
+			rd_product_id = settings.ProductId;
+
+			switch (settings.Modulation.ToLower())
+			{
+				case "robo":
+					rd_modulation_type = (byte)ModulationTypes.ROBO;
+					break;
+				case "qpsk":
+					rd_modulation_type = (byte)ModulationTypes.QPSK;
+					break;
+				case "bpsk":
+					rd_modulation_type = (byte)ModulationTypes.BPSK;
+					break;
+				case "eightpsk":
+					rd_modulation_type = (byte)ModulationTypes.EightPSK;
+					break;
+				case "superrobo":
+					rd_modulation_type = (byte)ModulationTypes.SUPER_ROBO;
+					break;
+				default:
+					rd_modulation_type = (byte)ModulationTypes.ROBO;
+					break;
+			}
+
+			rd_agc = settings.AGC;
+
+			rd_gain_value = (ushort)settings.Gain;
+
+			rd_transmit_level = settings.TransmitLevel;
+
+			rd_rx_timeout_milliseconds = settings.RxTimeoutMilliSecs;
+
+			rd_round_robin_task_sleep_secs = settings.DataReportingIntervalSecs;
+
+			rd_plc_comm_timeout_secs = settings.PLCCommTimeoutSecs;
+			rd_number_of_nodes = (ushort)settings.NumberOfNodes;
+			rd_time_per_node_secs = (ushort)settings.TimerPerNodeSecs;
+			rd_node_reset_time_secs = settings.NodeResetTimeSecs;
+			rd_attach_high_priority = settings.AttachHighPriority;
+			rd_confirmation_timeout_secs = settings.ConfirmationTimeoutSecs;
+			rd_is_subnet_gateway = settings.IsSubnetGateway;
+			rd_subnet_use_ethernet = settings.UseEthernet;
+			rd_subnetdc_ipaddress = settings.SubnetDCIpAddress;
+			rd_subnetdc_port = settings.SubnetDCPort;
+			rd_subnetdc_identifier = settings.SubnetDCIdentifier;
+			rd_sendtocloud = settings.SendToCloud;
+			rd_pipeconnectionname = settings.PipeConnectionName;
+		}
+
+		private void LoadSettingsOld()
         {
 			// load default values
 			rd_pan_id = NETWORK_PAN_ID;
@@ -792,6 +909,14 @@ namespace CentralMaster
 
 		private void ReceivedDataTransferConfirm(CentralMaster.DataTransferConfirm dtc) 
 		{
+			if (dtc.status != 0)
+            {
+				var tmp_sts_str = dtc.status.ToString("X");
+				DCLogger.Information(string.Format($"Data transfer confirm status = 0x{tmp_sts_str}"));
+				DCLogger.Information(string.Format($"bytes: {BitConverter.ToString(dtc.bytes)}"));
+				DCLogger.Information("Exiting centralmaster app.");
+				System.Environment.Exit(-1);
+			}
 			//RollingFileLogger.Debug(dtc.ToString());
 			string ipv6_addr_str;
 			ipv6_addr_str = CentralMaster.Utils.GetIpv6AddressForHandle(dtc.nsdu_handle);
@@ -1000,7 +1125,8 @@ namespace CentralMaster
 		{
 			// debug only
 			WriteMessage("Starting Round Robin DC Task");
-			Task.Factory.StartNew(() =>  DoRRWork(RRDCTaskCTS.Token), RRDCTaskCTS.Token);
+			Task t_rr = Task.Factory.StartNew(() =>  DoRRWork(RRDCTaskCTS.Token), RRDCTaskCTS.Token);
+            t_rr.Wait();
 		}
 
 		private void StopRoundRobinDCTask()

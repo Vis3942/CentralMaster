@@ -70,7 +70,7 @@ namespace CentralMaster
             {
                 try
                 {
-                    string device_json_fname = System.IO.Path.Combine("Devices", dev_name+ ".json");
+                    string device_json_fname = System.IO.Path.Combine(AppOptions.ParameterDirectory, "Devices", dev_name + ".json");
                     if (System.IO.File.Exists(device_json_fname))
                     {
                         DCLogger.Information(string.Format("Loading device info from file {0}", device_json_fname));

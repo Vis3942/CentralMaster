@@ -60,7 +60,19 @@ namespace CentralMaster.DataServiceCommunications
         {
             if (serverPipe == null)
             {
-                Task.Run(() => StartPipedServerAsync(), pipeServerTokenSrc.Token);
+                Task.Run(() => StartPipedServerAsync(), pipeServerTokenSrc.Token).ContinueWith((t) =>
+                {
+                    if (t.Exception != null)
+                        t.Exception.Handle((e) => {
+                            //Handle Exception and if OK, return true.
+                            DCLogger.Error(e, "Start Pipe Server Task");
+                            if (e.GetType().ToString().Contains("IOException"))
+                            {
+                                System.Environment.Exit(1);
+                            }
+                            return true;
+                        });
+                });
             }
         }
 
@@ -246,6 +258,9 @@ namespace CentralMaster.DataServiceCommunications
                 {
                     DCLogger.Debug($"is connected = {serverPipe.IsConnected}");
                 }
+                DCLogger.Debug("Restarting pipe server.");
+                StopServer();
+                StartServer();
             }
         }
 

@@ -11,74 +11,61 @@ namespace CentralMaster
 {
 	class MainClass
 	{
-		private static readonly StreamWriter tw = new StreamWriter("serilog_errs.txt");
+		private static string AppConfigDirectory = "/home/debian/config/centralmaster";
 		public static void Main(string[] args)
 		{
-			//SetupStaticLogger();
-			DCLogger.InitLogger(
-				log_to: AppOptions.GetAppOptions.LogTo,
-				log_level: AppOptions.GetAppOptions.LogLevel,
-				max_file_count: AppOptions.GetAppOptions.MaxCountFiles,
-				max_file_size_mb: AppOptions.GetAppOptions.MaxLogFileSizeMB,
-				log_file_name: AppOptions.GetAppOptions.LogFileName);
-
-			try
+			if (args.Length > 0)
 			{
-				AdminServer admin_server = new AdminServer();
-				admin_server.StartServer();
-
-				HostApp happ = new HostApp();
-				happ.StartApplication();
+				AppOptions.ParameterDirectory = args[0];
 			}
-			catch (Exception ex)
+			else
 			{
-				DCLogger.Fatal(ex, "An unhandled exception occurred.");
+				AppOptions.ParameterDirectory = AppConfigDirectory;
 			}
-			finally
-			{
-				//RollingFileLogger.CloseAndFlush();
+			if (AppOptions.GetAppOptions != null)
+            {
+				DCLogger.InitLogger(
+					log_to: AppOptions.GetAppOptions.LogTo,
+					log_level: AppOptions.GetAppOptions.LogLevel,
+					max_file_count: AppOptions.GetAppOptions.MaxCountFiles,
+					max_file_size_mb: AppOptions.GetAppOptions.MaxLogFileSizeMB,
+					log_file_name: AppOptions.GetAppOptions.LogFileName);
+
+				try
+				{
+					AdminServer admin_server = new AdminServer();
+					admin_server.StartServer();
+
+					HostApp happ = new HostApp();
+					happ.StartApplication();
+				}
+				catch (Exception ex)
+				{
+					DCLogger.Fatal(ex, "An unhandled exception occurred.");
+				}
+				finally
+				{
+					DCLogger.Information("Exiting main application");
+					//RollingFileLogger.CloseAndFlush();
+				}
+
+				//HostApp happ = new HostApp();
+				//happ.StartApplication();
+			}
+			else
+            {
+				// load default options and write error info to file and exit
+				DCLogger.InitLogger(
+					log_to: "file",
+					log_level: "information",
+					max_file_count: 10,
+					max_file_size_mb: 5,
+					log_file_name: "cm_app_log.txt"
+				);
+				DCLogger.Error($"Failed to load options from {AppConfigDirectory}");
 			}
 
-			//HostApp happ = new HostApp();
-			//happ.StartApplication();
 		}
-
-		//private static void SetupStaticLogger()
-		//{
-			
-		//	//SelfRollingFileLogger.Enable(Console.Out);
-		//	SelfLog.Enable(tw);
-
-		//	if (AppOptions.GetAppOptions.LogTo.ToLower().Equals("console"))
-		//	{
-		//		//var configuration = new ConfigurationBuilder()
-		//		//	.AddJsonFile("log_settings_console.json")
-		//		//	.Build();
-
-		//		//RollingFileLogger.Logger = new LoggerConfiguration()
-		//		//	.ReadFrom.Configuration(configuration)
-		//		//	.CreateLogger();
-
-		//		//RollingFileLogger.Logger = new LoggerConfiguration()
-		//		//	.WriteTo.Console(theme: ConsoleTheme.None)
-		//		//	.CreateLogger();
-		//	}
-		//	else
-		//	{
-		//		//var configuration = new ConfigurationBuilder()
-		//		//	.AddJsonFile("log_settings_file.json")
-		//		//	.Build();
-
-		//		//RollingFileLogger.Logger = new LoggerConfiguration()
-		//		//	.ReadFrom.Configuration(configuration)
-		//		//	.CreateLogger();
-		//		//RollingFileLogger.Logger = new LoggerConfiguration()
-		//		//	.WriteTo.Async(a => a.File("cm_app_RollingFileLogger.txt"))
-		//		//	.CreateLogger();
-		//	}
-
-		//	//Console.WriteLine($"Main: Logger created is {RollingFileLogger.Logger.ToString()}");
-		//}
 
 	}
 }

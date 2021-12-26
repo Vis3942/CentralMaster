@@ -3,9 +3,10 @@
 <#
     int major    = 1;
     int minor    = 1; 
-    int build    = 4; 
+    int build    = 5; 
 
-    string version = String.Format("{0}.{1}.{2}", major, minor, build);
+    // build to 5f
+    string version = String.Format("{0}.{1}.{2}G", major, minor, build);
     bool previewMode = false; //not using preview build
     if (previewMode) // Preview build
     {

@@ -1,0 +1,18 @@
+{
+  "devices": [
+    {
+      "uuid": "3ad1e878-10f7-437a-9095-27a621510737",
+      "device": "IAQMeasurement",
+      "channel": 0,
+      "config_command": "",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "GetIAQData",
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "ComputedData": {}
+}

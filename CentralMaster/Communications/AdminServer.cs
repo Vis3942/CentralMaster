@@ -59,7 +59,8 @@ namespace CentralMaster.Communications
             adminServerPort = AppOptions.GetAppOptions.AdminPort;
             string cert_file_name = AppOptions.GetAppOptions.CertificateName;
             // load certificate if file found
-            string withpath_cert_file_name = System.IO.Path.Combine("certs", cert_file_name + ".pfx");
+            string withpath_cert_file_name = System.IO.Path.Combine(AppOptions.ParameterDirectory, 
+                "certs", cert_file_name + ".pfx");
             DCLogger.Verbose($"certificate file at {withpath_cert_file_name}");
             if (File.Exists(withpath_cert_file_name))
             {
@@ -406,7 +407,8 @@ namespace CentralMaster.Communications
             {
                 // update new password
                 byte[] new_pwd_b = SHA256.HashData(Encoding.UTF8.GetBytes(user_info[2].Trim()));
-                var user_admin_file = System.IO.Path.Combine("certs", SET_USER_FILE);
+                var user_admin_file = System.IO.Path.Combine(AppOptions.ParameterDirectory, 
+                    "certs", SET_USER_FILE);
                 File.WriteAllBytes(user_admin_file, new_pwd_b);
                 return true;
             }
@@ -418,8 +420,8 @@ namespace CentralMaster.Communications
 
         private byte[] GetAdmihHash()
         {
-            var user_admin_file = System.IO.Path.Combine("certs", SET_USER_FILE);
-            var default_admin_file = System.IO.Path.Combine("certs", DEFAULT_USER_FILE);
+            var user_admin_file = System.IO.Path.Combine(AppOptions.ParameterDirectory, "certs", SET_USER_FILE);
+            var default_admin_file = System.IO.Path.Combine(AppOptions.ParameterDirectory, "certs", DEFAULT_USER_FILE);
             if (System.IO.File.Exists(user_admin_file))
             {
                 byte[] set_user_b = File.ReadAllBytes(user_admin_file);

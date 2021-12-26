@@ -30,5 +30,31 @@ namespace CentralMaster.json
         public string SupportingService { get; set; }
         public string ParametersDirectory { get; set; }
         public string[] ProductNames { get; set; }
+        public string PanId { get; set; }
+        public string XAddress { get; set; }
+        public string PSK { get; set; }
+        public int VendorId { get; set; }
+        public string ProductId { get; set; }
+        public string Modulation { get; set; }
+        public string ToneMaskName { get; set; }
+        public string ToneMaskValues { get; set; }
+        public bool AGC { get; set; }
+        public int Gain { get; set; }
+        public int TransmitLevel { get; set; }
+        public int DataReportingIntervalSecs { get; set; }
+        public int PLCCommTimeoutSecs { get; set; }
+        public int RxTimeoutMilliSecs { get; set; }
+        public int NumberOfNodes { get; set; }
+        public int TimerPerNodeSecs { get; set; }
+        public int NodeResetTimeSecs { get; set; }
+        public bool AttachHighPriority { get; set; }
+        public int ConfirmationTimeoutSecs { get; set; }
+        public int IsSubnetGateway { get; set; }
+        public int UseEthernet { get; set; }
+        public string SubnetDCIpAddress { get; set; }
+        public int SubnetDCPort { get; set; }
+        public string SubnetDCIdentifier { get; set; }
+        public bool SendToCloud { get; set; }
+        public string PipeConnectionName { get; set; }
     }
 }

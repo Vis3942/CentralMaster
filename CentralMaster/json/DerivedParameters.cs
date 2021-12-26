@@ -52,9 +52,10 @@ namespace CentralMaster.json
 
         private static async void LoadDataFromAzureURL()
         {
-            if (System.IO.File.Exists(AZURE_CONNECTION_INFO_FILENAME))
+            string azure_info_with_path = System.IO.Path.Combine(AppOptions.ParameterDirectory, AZURE_CONNECTION_INFO_FILENAME);
+            if (System.IO.File.Exists(azure_info_with_path))
             {
-                string json_str_from_file = System.IO.File.ReadAllText(AZURE_CONNECTION_INFO_FILENAME);
+                string json_str_from_file = System.IO.File.ReadAllText(azure_info_with_path);
                 var jsonDoc1 = System.Text.Json.JsonDocument.Parse(json_str_from_file);
                 var rootElement1 = jsonDoc1.RootElement;
                 var param_url = rootElement1.GetProperty("Url").ToString();

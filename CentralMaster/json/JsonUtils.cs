@@ -18,11 +18,13 @@ namespace CentralMaster.json
             string dll_path;
             if ((ass_dir == null) || (ass_dir.Length == 0))
             {
-                dll_path = Path.Combine(Directory.GetCurrentDirectory(), ass_name + ".dll");
+                dll_path = Path.Combine(AppOptions.ParameterDirectory, ass_name + ".dll");
+                //dll_path = Path.Combine(Directory.GetCurrentDirectory(), ass_name + ".dll");
             }
             else
             {
-                dll_path = Path.Combine(Directory.GetCurrentDirectory(), ass_dir, ass_name + ".dll");
+                dll_path = Path.Combine(AppOptions.ParameterDirectory, ass_dir, ass_name + ".dll");
+                //dll_path = Path.Combine(Directory.GetCurrentDirectory(), ass_dir, ass_name + ".dll");
             }
             if (!System.IO.File.Exists(dll_path))
             {

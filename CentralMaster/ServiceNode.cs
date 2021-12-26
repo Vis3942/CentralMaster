@@ -120,7 +120,8 @@ enum RRGetCommandTypes: int
 	RR_CMD_ANALOG = 0x06,
 	RR_CMD_DIGITAL = 0x07,
 	RR_CMD_POWERMEASUREMENT = 0x08,
-	RR_CMD_I2C = 0x09
+	RR_CMD_I2C = 0x09,
+	RR_CMD_IAQ = 0x0A
 }
 
 namespace CentralMaster
@@ -435,6 +436,7 @@ namespace CentralMaster
 		private List<RRCommand> digital_cmd_list = new List<RRCommand>();
 		private List<RRCommand> powermeasurement_cmd_list = new List<RRCommand>();
 		private List<RRCommand> i2c_cmd_list = new List<RRCommand>();
+		private List<RRCommand> iaq_cmd_list = new List<RRCommand>();
 		private List<int> rr_cmds_list = new List<int>();
 		private int curr_rr_cmd_index = -1;  // index into the rr_cmds_list
 		private string cmd_event_id = "";
@@ -1067,6 +1069,9 @@ namespace CentralMaster
 				case (int)RRGetCommandTypes.RR_CMD_I2C:
 					loc_rr_cmd_list = i2c_cmd_list;
 					break;
+				case (int)RRGetCommandTypes.RR_CMD_IAQ:
+					loc_rr_cmd_list = iaq_cmd_list;
+					break;
 				default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[curr_rr_cmd_index]}");
 					break;
@@ -1286,7 +1291,47 @@ namespace CentralMaster
 							index += (ch_data_len + 1);
 						}
 						break;
-                    default:
+					case ProtocolMessagesG3PLC.IAQ_RESPONSE_ID:
+						//DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+						while (index < msg_bytes.Length)
+						{
+							ch_num = msg_bytes[index];
+							ch_start_idx = index + 1;
+							ch_data_len = 57; // 13 float values: 4 bytes each + 2 uint16 values + 1 uint8 value
+							RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+							if (tmp_rr_cmd != null)
+							{
+								List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+								if (list_rd != null)
+								{
+									foreach (var tmprd in list_rd)
+									{
+										tmprd.EventId = cmd_event_id;
+									}
+									if (cmd_event_id.Length > 0)
+									{
+										cmd_event_id = "";
+									}
+									AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+									foreach (var tmp_rd in list_rd)
+									{
+										DCLogger.Debug(tmp_rd.ToString());
+									}
+								}
+							}
+							else
+							{
+								DCLogger.Debug($"Failed to find channel {ch_num}");
+								foreach (RRCommand rrcmd in loc_rr_cmd_list)
+								{
+									DCLogger.Debug($"cmd: {rrcmd.command_name}, dev name {rrcmd.device_name}, channel {rrcmd.channel}");
+								}
+
+							}
+							index += (ch_data_len + 1);
+						}
+						break;
+					default:
                         DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
                         break;
                 }
@@ -1585,7 +1630,7 @@ namespace CentralMaster
 				node_cmd_filename = _common_name + "_" + _serial_num + ".json";
 				product_dev = false;
 			}
-			string node_fname = System.IO.Path.Combine("NodesInfo", node_cmd_filename);
+			string node_fname = System.IO.Path.Combine(AppOptions.ParameterDirectory, "NodesInfo", node_cmd_filename);
 			if (product_dev)
             {
 				DCLogger.Information($"Loading product -> {_common_name} with serial num -> {_serial_num}, devices from {node_fname}");
@@ -1702,6 +1747,9 @@ namespace CentralMaster
 								case "i2c":
 									i2c_cmd_list.Add(tmp_rr_cmd);
 									break;
+								case "iaq":
+									iaq_cmd_list.Add(tmp_rr_cmd);
+									break;
 								default:
 									DCLogger.Information($"unknown hw itnerfadce type {hw_interface}. Unable to process");
 									break;
@@ -1746,6 +1794,10 @@ namespace CentralMaster
                     {
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_I2C);
                     }
+					if (iaq_cmd_list.Count > 0)
+                    {
+						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_IAQ);
+					}
 				}
                 else
                 {
@@ -1810,6 +1862,9 @@ namespace CentralMaster
 					break;
 				case (int)RRGetCommandTypes.RR_CMD_I2C:
 					loc_rr_cmd_list = i2c_cmd_list;
+					break;
+				case (int)RRGetCommandTypes.RR_CMD_IAQ:
+					loc_rr_cmd_list = iaq_cmd_list;
 					break;
 				default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[cmd_list_index]}");
@@ -1892,7 +1947,7 @@ namespace CentralMaster
 				foreach (var rr_cmd in loc_rr_cmd_list)
 				{
 					//JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
-					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasIAQRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
 						rr_cmd.channel);
 					if (pkt_len == 0xFFFF)
 					{
@@ -1911,7 +1966,7 @@ namespace CentralMaster
 				foreach (var rr_cmd in loc_rr_cmd_list)
                 {
 					JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
-					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.ANALOG_INPUT_REQUEST_ID, ref pkt, pkt.Length,
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasIAQRequest(ProtocolMessagesG3PLC.ANALOG_INPUT_REQUEST_ID, ref pkt, pkt.Length,
 						rr_cmd.channel);
 					if (pkt_len == 0xFFFF)
 					{
@@ -1926,7 +1981,7 @@ namespace CentralMaster
 				foreach (var rr_cmd in loc_rr_cmd_list)
 				{
 					JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
-					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasRequest(ProtocolMessagesG3PLC.DIGITAL_INPUT_REQUEST_ID, ref pkt, pkt.Length,
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasIAQRequest(ProtocolMessagesG3PLC.DIGITAL_INPUT_REQUEST_ID, ref pkt, pkt.Length,
 						rr_cmd.channel);
 					if (pkt_len == 0xFFFF)
 					{
@@ -1963,6 +2018,21 @@ namespace CentralMaster
 					}
 				}
 			}
+			else if (hw_interface_type.ToLower().Equals("iaq"))
+            {
+				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.IAQ_REQUEST_ID, ref pkt, pkt.Length);
+				foreach (var rr_cmd in loc_rr_cmd_list)
+				{
+					//JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasIAQRequest(ProtocolMessagesG3PLC.IAQ_REQUEST_ID, ref pkt, pkt.Length,
+						rr_cmd.channel);
+					if (pkt_len == 0xFFFF)
+					{
+						DCLogger.Error($"IAQ: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						return false;
+					}
+				}
+			}
 			else
 			{
 				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
@@ -1991,6 +2061,8 @@ namespace CentralMaster
 			else 
 			{
 				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
+				DCLogger.Information("Exiting centralmaster app.");
+				System.Environment.Exit(-1);
 			}
 			return sts;
 		}
@@ -2288,6 +2360,8 @@ namespace CentralMaster
 			else
 			{
 				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs / 1000));
+				DCLogger.Information("Exiting centralmaster app.");
+				System.Environment.Exit(-1);
 			}
 			return sts;
 		}
