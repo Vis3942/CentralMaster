@@ -10,6 +10,7 @@ using CentralMaster.json;
 using UtilsLibrary;
 using CentralMaster.DataServiceCommunications;
 using LogUtils;
+using System.Timers;
 
 namespace CentralMaster
 {
@@ -99,6 +100,10 @@ namespace CentralMaster
 		int plc_gpip_pin = 48;
 		System.Device.Gpio.GpioController gpioController=null;
 		private StatusServicePipeClient sspc = null;
+
+		private ManualResetEvent plc_init_timeout_event = new ManualResetEvent(false);
+		private bool plc_init_resp_recvd = false;
+		private System.Timers.Timer plc_init_timer = new System.Timers.Timer();
 		#endregion //vars
 
 		#region property
@@ -200,11 +205,16 @@ namespace CentralMaster
 					}
 				}
 			}
+
+			plc_init_timer.AutoReset = false;
+			plc_init_timer.Elapsed += CheckRecvStatus;
+			plc_init_timer.Interval = AppOptions.GetAppOptions.PLCCommTimeoutSecs * 1000;
+
 			dCDataServiceComms = new DCPipeServer(rd_pipeconnectionname);
 			((DCPipeServer)dCDataServiceComms).StartServer();
 		}
 
-		private bool WaitForResponse(ServiceNode sn, int timeOut_ms)
+        private bool WaitForResponse(ServiceNode sn, int timeOut_ms)
 		{
 			// Stopwatch stopwatch = new Stopwatch(); 
 			// stopwatch.Start();
@@ -909,11 +919,11 @@ namespace CentralMaster
 
 		private void ReceivedDataTransferConfirm(CentralMaster.DataTransferConfirm dtc) 
 		{
-			if (dtc.status != 0)
+			var tmp_sts_str = dtc.status.ToString("X");
+			DCLogger.Information(string.Format($"Data transfer confirm status = 0x{tmp_sts_str}"));
+			DCLogger.Information(string.Format($"bytes: {BitConverter.ToString(dtc.bytes)}"));
+			if ( (dtc.status != 0) && (dtc.status != 0x5088) )
             {
-				var tmp_sts_str = dtc.status.ToString("X");
-				DCLogger.Information(string.Format($"Data transfer confirm status = 0x{tmp_sts_str}"));
-				DCLogger.Information(string.Format($"bytes: {BitConverter.ToString(dtc.bytes)}"));
 				DCLogger.Information("Exiting centralmaster app.");
 				System.Environment.Exit(-1);
 			}
@@ -1112,6 +1122,9 @@ namespace CentralMaster
 
 		private void ReceivedMessage(byte command_type, ushort command_sub_type, CentralMaster.MessageHeader message)
 		{
+			plc_init_resp_recvd = true;
+			plc_init_timer.Stop();
+			//plc_init_timeout_event.Set();
 			ProcessMessages(command_type, command_sub_type, message);
 		}
 
@@ -1126,7 +1139,7 @@ namespace CentralMaster
 			// debug only
 			WriteMessage("Starting Round Robin DC Task");
 			Task t_rr = Task.Factory.StartNew(() =>  DoRRWork(RRDCTaskCTS.Token), RRDCTaskCTS.Token);
-            t_rr.Wait();
+            //t_rr.Wait();
 		}
 
 		private void StopRoundRobinDCTask()
@@ -1331,6 +1344,29 @@ namespace CentralMaster
 			}
 		}
 
+		private void WaitForResponseWithTimeout(int timeout_secs)
+        {
+			plc_init_timeout_event.Reset();
+			DCLogger.Debug("reset wait for resp timeout");
+			bool sts = plc_init_timeout_event.WaitOne(timeout_secs * 1000);
+			DCLogger.Debug($" wait for response with timeout, sts = {sts}");
+			if (!sts)
+            {
+				DCLogger.Error($"PLC Init: Timed out waiting for response: {timeout_secs} secs");
+				System.Environment.Exit(2);
+            }
+		}
+
+		private void CheckRecvStatus(Object source, System.Timers.ElapsedEventArgs e)
+		{
+			if (!plc_init_resp_recvd)
+			{
+				DCLogger.Error($"Failed to recv response from plc layer (during init) in {plc_init_timer.Interval}");
+				DCLogger.Error("Exiting CentralMaster app");
+				System.Environment.Exit(1);
+			}
+		}
+
 		private void ProcessMessages(byte command_type, ushort command_sub_type, CentralMaster.MessageHeader message)
 		{
 			bool loc_send_cmd;
@@ -1372,6 +1408,12 @@ namespace CentralMaster
 				//host_messaging.SendGetSystemInfoRequest();
 				//
 				ControllerState = (int)RootNodeStates.STEP00_INIT;
+				plc_init_resp_recvd = false;
+				plc_init_timer.Start();
+				//if (!plc_init_resp_recvd)
+    //            {
+				//	WaitForResponseWithTimeout(AppOptions.GetAppOptions.PLCCommTimeoutSecs);
+				//}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP00_INIT)
 			{
@@ -1386,12 +1428,16 @@ namespace CentralMaster
 							// there are neighbour nodes attached
 							host_messaging.SendGetSystemInfoRequest();
 							ControllerState = (int)RootNodeStates.STEP08_SET_TX_PARAMS; //(int)RootNodeStates.STEP07_SET_VENDOR_IDS;
+							plc_init_resp_recvd = false;
+							plc_init_timer.Start();
 						}
 						else
 						{
 							// no neighbour nodes attached, can go the default route
 							host_messaging.SendLoadSystemConfigPorts((byte)1, (byte)1);
 							ControllerState = (int)RootNodeStates.STEP02_CONFIG_PORTS;
+							plc_init_resp_recvd = false;
+							plc_init_timer.Start();
 						}
 					}
 				}
@@ -1420,6 +1466,9 @@ namespace CentralMaster
 					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigSystem((int)DeviceModes.Normal_Mode);
 					ControllerState = (int)RootNodeStates.STEP04_LOAD_G3_SYSTEM_CONFIG; //(int)RootNodeStates.STEP03_LOAD_SYSTEM_CONFIG;
+
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP03_LOAD_SYSTEM_CONFIG)
@@ -1429,6 +1478,8 @@ namespace CentralMaster
 					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigSystem((int)DeviceModes.Normal_Mode);
 					ControllerState = (int)RootNodeStates.STEP04_LOAD_G3_SYSTEM_CONFIG;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (byte)RootNodeStates.STEP04_LOAD_G3_SYSTEM_CONFIG)
@@ -1438,6 +1489,8 @@ namespace CentralMaster
 					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendLoadSystemConfigG3(false, false, rd_xaddress);
 					ControllerState = (int)RootNodeStates.STEP05_SHUTDOWN; // (int)RootNodeStates.STEP04A_SET_PSK;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP04A_SET_MAC_PIB_PSK)
@@ -1447,6 +1500,8 @@ namespace CentralMaster
 					WriteMessage(((CentralMaster.LoadSystemConfigResponse)message).ToString());
 					host_messaging.SendPSK(rd_psk);
 					ControllerState = (int)RootNodeStates.STEP05_SHUTDOWN;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP05_SHUTDOWN)
@@ -1466,6 +1521,8 @@ namespace CentralMaster
 					// send shutdown message; then send next message after 10 secs; change state after 10 secs too
 					host_messaging.SendShutdown((ushort)ShutdownTypes.SoftReset);
 					ControllerState = (int)RootNodeStates.STEP06_GET_SYSTEM_INFO_AFTER_SD;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP06_GET_SYSTEM_INFO_AFTER_SD)
@@ -1479,6 +1536,8 @@ namespace CentralMaster
 
 					host_messaging.SendGetSystemInfoRequest();
 					ControllerState = (int)RootNodeStates.STEP08_SET_TX_PARAMS; //(int)RootNodeStates.STEP07_SET_VENDOR_IDS;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP07_SET_VENDOR_IDS)
@@ -1489,6 +1548,8 @@ namespace CentralMaster
 
 					host_messaging.SendSetInfoSubVendorProductIds((ushort)rd_vendor_id, rd_product_id);
 					ControllerState = (int)RootNodeStates.STEP08_SET_TX_PARAMS;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP08_SET_TX_PARAMS)
@@ -1504,13 +1565,14 @@ namespace CentralMaster
 					WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
 					loc_send_cmd = true;
 				}
-
 				if (loc_send_cmd)
 				{
 					//host_messaging.SendSetInfoSubTxParams(false, (byte)ModulationTypes.ROBO, 32, 0, "Cenelec A 36");
 					//host_messaging.SendSetInfoSubTxParams(false, (byte)rd_modulation_type, (ushort) rd_transmit_level, 0, "Cenelec B");
 					host_messaging.SendSetInfoSubTxParams(false, (byte)rd_modulation_type, (ushort) rd_transmit_level, 0, rd_tone_maskname);
 					ControllerState = (int)RootNodeStates.STEP09_SET_RX_PARAMS;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP09_SET_RX_PARAMS)
@@ -1522,38 +1584,43 @@ namespace CentralMaster
 					//host_messaging.SendSetInfoSubRxParams(false, false, true,7, 0, "Cenelec B");
 					host_messaging.SendSetInfoSubRxParams(false, false, rd_agc, rd_gain_value, 0, rd_tone_maskname);
 					ControllerState = (int)RootNodeStates.STEP10A_M_INITIALIZING_NETWORK;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP10A_M_INITIALIZING_NETWORK)
-			{
-				if (command_type == (byte)CommandTypes.SET_INFO) // INSTEAD OF NETWORK_START
-				{
-					WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
-					host_messaging.SendSetAlarm((byte)AlarmTypes.GENERAL_ERROR, true);
-					ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH; // STEP10D_M_START_NETWORK; //STEP10B_M_SET_ALARM; // STEP10C_M_START_NETWORK; //RootNodeStates.STEP12_M_NETWORK_READY;
+			{	
+                if (command_type == (byte)CommandTypes.SET_INFO)
+                {
+                    WriteMessage(((CentralMaster.SetInfoResponse)message).ToString());
+                    host_messaging.SendSetAlarm((byte)AlarmTypes.GENERAL_ERROR, true);
+                    ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP10B_M_SET_ALARM)
 			{
-				if (command_type == (byte)CommandTypes.SETUP_ALARM)
-				{
-					WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
-					host_messaging.SendSetAlarm((byte)AlarmTypes.G3_NETWORK_STATUS, true);
-					ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH; //STEP10D_M_START_NETWORK;
+                if (command_type == (byte)CommandTypes.SETUP_ALARM)
+                {
+                    WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
+                    host_messaging.SendSetAlarm((byte)AlarmTypes.G3_NETWORK_STATUS, true);
+                    ControllerState = (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
-
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP10D_M_SET_MAC_PIB_COH)
 			{
-				if (command_type == (byte)CommandTypes.SETUP_ALARM)
-				{
-					WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
-
-					host_messaging.SendSetMACPIB((uint)0xFFFFFFFA, new byte[] { 0, 0 }, 0);
-					ControllerState = (int)RootNodeStates.STEP10E_M_START_NETWORK;
+                if (command_type == (byte)CommandTypes.SETUP_ALARM)
+                {
+                    WriteMessage(((CentralMaster.SetAlarmResponse)message).ToString());
+                    host_messaging.SendSetMACPIB((uint)0xFFFFFFFA, new byte[] { 0, 0 }, 0);
+                    ControllerState = (int)RootNodeStates.STEP10E_M_START_NETWORK;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
-
 			else if (ControllerState == (int)RootNodeStates.STEP10E_M_START_NETWORK)
 			{
 				loc_send_cmd = false;
@@ -1571,6 +1638,8 @@ namespace CentralMaster
 				{
 					host_messaging.SendStartNetwork(rd_pan_id);
 					ControllerState = (int)RootNodeStates.STEP11_M_NETWORK_START_SUCCESS;
+					plc_init_resp_recvd = false;
+					plc_init_timer.Start();
 				}
 			}
 			else if (ControllerState == (int)RootNodeStates.STEP11_M_NETWORK_START_SUCCESS)
