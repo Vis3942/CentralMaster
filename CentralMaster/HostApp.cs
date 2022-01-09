@@ -1165,6 +1165,9 @@ namespace CentralMaster
 			int node_command_count = 0;
             int timeout_secs = 0;
             DateTime start_time = DateTime.Now;
+			DateTime start_rr_loop = DateTime.Now;
+			double timespent_rr_loop = 0;
+			int timespent_rr_loop_int = 0;
 			while (!ct.IsCancellationRequested)
 			{
 				// are there any messages in the attach sequence
@@ -1232,6 +1235,7 @@ namespace CentralMaster
 						// 	//}
 						// }
 						rr_index = 0;
+						start_rr_loop = DateTime.Now;
 						timeout_secs = 0;
 						if (comm_ready_node_dict_changed == true)
 						{
@@ -1267,7 +1271,16 @@ namespace CentralMaster
 							rr_index++;
 							if (rr_index >= rr_sn.Count)
 							{
-								timeout_secs = rd_round_robin_task_sleep_secs;
+								timespent_rr_loop = (DateTime.Now - start_rr_loop).TotalSeconds;
+								timespent_rr_loop_int = (int)System.Math.Round(timespent_rr_loop);
+								if (timespent_rr_loop_int >= rd_round_robin_task_sleep_secs)
+                                {
+									timeout_secs = 0;
+                                }
+								else
+                                {
+									timeout_secs = rd_round_robin_task_sleep_secs - timespent_rr_loop_int;
+								}
 								start_time = DateTime.Now;
 							}
 						}
