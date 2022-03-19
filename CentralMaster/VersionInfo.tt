@@ -3,7 +3,7 @@
 <#
     int major    = 1;
     int minor    = 1; 
-    int build    = 8; 
+    int build    = 9; 
 
     // build
     string version = String.Format("{0}.{1}.{2}", major, minor, build);

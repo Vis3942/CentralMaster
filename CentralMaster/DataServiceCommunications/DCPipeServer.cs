@@ -250,6 +250,13 @@ namespace CentralMaster.DataServiceCommunications
                 buffer.SendAsync(message);
                 //swriter.WriteLine(message);
             }
+            else if ( (serverPipe != null) && (!serverPipe.IsConnected) )
+            {
+                DCLogger.Information("Uable to send to Data Services layer");
+                DCLogger.Information("Waiting for connection from Data Services");
+                DCLogger.Debug($"serverPipe = {serverPipe}, swriter = {swriter}");
+                DCLogger.Debug($"is connected = {serverPipe.IsConnected}");
+            }
             else
             {
                 DCLogger.Information("Failed to send to Data Services layer");
