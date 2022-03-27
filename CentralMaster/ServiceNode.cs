@@ -1117,15 +1117,19 @@ namespace CentralMaster
                                     List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
                                     if (list_rd != null)
                                     {
-                                        string tmp_prefix = "i2c" + tmp_rr_cmd.channel.ToString("00_");
-                                        if ((tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0))
+										string tmp_prefix = "";
+										if (pkt_id == ProtocolMessagesG3PLC.I2C_RESPONSE_ID)
+                                        {
+											tmp_prefix = "i2c" + tmp_rr_cmd.channel.ToString("00_");
+										}
+										if ((tmp_rr_cmd.data_names != null) && (tmp_rr_cmd.data_names.Length > 0))
                                         {
                                             string[] tmp_name_map = tmp_rr_cmd.data_names.Replace(" ", "").Replace(":", ",").Split(',');
                                             if (tmp_name_map.Length % 2 == 0)
                                             {
                                                 for (ii = 0; ii < tmp_name_map.Length; ii += 2)
                                                 {
-                                                    data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
+                                                    data_name_map.Add(tmp_prefix + tmp_name_map[ii].Trim(), tmp_name_map[ii+1].Trim());
                                                 }
                                             }
                                         }
@@ -1195,7 +1199,7 @@ namespace CentralMaster
                                         {
                                             for (ii = 0; ii < tmp_name_map.Length; ii += 2)
                                             {
-                                                data_name_map.Add(tmp_prefix + tmp_name_map[0].Trim(), tmp_name_map[1].Trim());
+                                                data_name_map.Add(tmp_prefix + tmp_name_map[ii].Trim(), tmp_name_map[ii+1].Trim());
                                             }
                                         }
                                     }
