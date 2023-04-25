@@ -238,6 +238,31 @@ namespace CentralMaster
                 return null;
             }
         }
+
+        public static JsonCommand[] GetListOfSetCommands(string dev_name)
+        {
+            if (!devices.ContainsKey(dev_name))
+            {
+                LoadDevice(dev_name);
+            }
+            if (devices.ContainsKey(dev_name))
+            {
+                JsonCommands tmp_jcmds = devices[dev_name];
+                if ( (tmp_jcmds.set_commands == null) || (tmp_jcmds.set_commands.Length == 0) )
+                {
+                    return null;
+                }
+                else
+                {
+                    // compute and return values
+                    return tmp_jcmds.set_commands;
+                }
+            }
+            else
+            {
+                return null;
+            }
+        }
     }
 
 }

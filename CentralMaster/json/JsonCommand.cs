@@ -17,4 +17,16 @@ namespace CentralMaster.json
         public MethodInfo compute_values { get; set; }
         public JsonData[] data { get; set; }
     }
+
+    public class JsonCommandLite
+    {
+        public string name { get; set; }
+        public string description { get; set; }
+        public string type { get; set; }
+        public string value { get; set; }
+        public string min { get; set; }
+        public string max { get; set; }
+    }
+
+
 }

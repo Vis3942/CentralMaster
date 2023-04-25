@@ -25,6 +25,8 @@ namespace CentralMaster.DataServiceCommunications
         private Random srand = new Random(DateTime.Now.Millisecond);
         private BufferBlock<string> buffer = new BufferBlock<string>();
         private const int MAX_BUFFER_SIZE = 1024;
+        public Action<string> receivedMessage = null;
+
         #endregion // vars
 
         #region property
@@ -115,7 +117,7 @@ namespace CentralMaster.DataServiceCommunications
                                 await swriter.WriteLineAsync(tmp_message);
                             }
                         });
-                        var task = Task.Run(() => ReadDataFromPipe(pipeServerTokenSrc.Token), pipeServerTokenSrc.Token);
+                        var task = Task.Run(() => ReadDataFromPipeAsync(pipeServerTokenSrc.Token), pipeServerTokenSrc.Token);
                         if (task.IsFaulted)
                         {
                             break;
@@ -271,22 +273,61 @@ namespace CentralMaster.DataServiceCommunications
             }
         }
 
-        public void ReadDataFromPipe(CancellationToken cts)
+
+        private void messageToHost(string msg)
+        {
+            DCLogger.Information(string.Format("recvd message {0}", msg));
+            if (receivedMessage != null)
+            {
+                receivedMessage(msg);
+            }
+            else
+            {
+                DCLogger.Error("Message could not be sent to HostApp, no action function provided.");
+            }
+        }
+
+
+        public async Task ReadDataFromPipeAsync(CancellationToken cts)
         {
             while ((!cts.IsCancellationRequested) && (sreader != null))
             {
-                Task<string> t = sreader.ReadLineAsync();
-                if (t.IsFaulted)
+                //Task<string> t = sreader.ReadLineAsync();
+                //if (t.IsFaulted)
+                //{
+                //    break;
+                //}
+                //t.Wait();
+                //string recv_str = t.Result;
+                try
                 {
+                    string recv_str = await sreader.ReadLineAsync();
+                    if (recv_str == null)
+                    {
+                        break;
+                    }
+                    DCLogger.Information(string.Format("DCPipeSrv: recv: {0}", recv_str));
+                    messageToHost(recv_str);
+                }
+                catch (Exception excp)
+                {
+                    DCLogger.Error(excp, "Error Reading from Unix Domain socket pipe");
+                    DCLogger.Error(excp.StackTrace);
                     break;
                 }
-                t.Wait();
-                string recv_str = t.Result;
-                if (recv_str == null)
-                {
-                    break;
-                }
-                DCLogger.Information(string.Format("recv: {0}", recv_str));
+                //if (recv_str.StartsWith("get_cmds"))
+                //{
+                //    // extract node name (format 'get_cmds:<node_name>')
+                //    string tmpNodeName = recv_str.Replace("get_cmds:", "");
+                //    if (tmpNodeName == recv_str)
+                //    {
+                //        DCLogger.Error("no node name in get_cmds. recvd: " + recv_str );
+                //    }
+                //    else
+                //    {
+                //        DCLogger.Information("recvd get_cmds for node: " + tmpNodeName);
+                //    }
+                //}
             }
             if (sreader != null)
             {

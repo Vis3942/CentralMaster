@@ -1087,7 +1087,7 @@ namespace CentralMaster
 				DCLogger.Information($"Failed to compute response for command list for {curr_rr_cmd_index}");
 				return;
 			}
-			string tmp_node_name = _common_name + "-" + _serial_num;
+			string tmp_node_name = _common_name + "_" + _serial_num;
 			int number_of_channels = msg_bytes[4];
 			int index = 5; // 2 bytes pkt len; 2 bytes id; 1 byte num of channels
 			int ch_num;
@@ -1109,12 +1109,15 @@ namespace CentralMaster
                             ch_num = msg_bytes[index];
                             ch_start_idx = index + 5; // channel number
                             ch_data_len = msg_bytes[index + 4];
-                            if (msg_bytes[index + 3] == 0x00) // success
+							DCLogger.Debug($"chnum process: {ch_num}, start {ch_start_idx} len {ch_data_len}");
+							if (msg_bytes[index + 3] == 0x00) // success
                             {
+								
                                 RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
                                 if (tmp_rr_cmd != null)
                                 {
-                                    List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+									DCLogger.Debug($"compute from : device {tmp_rr_cmd.device_name} command {tmp_rr_cmd.command_name}");
+									List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
                                     if (list_rd != null)
                                     {
 										string tmp_prefix = "";
@@ -1154,7 +1157,7 @@ namespace CentralMaster
                                     }
                                 }
                             }
-                            index += (ch_data_len + 5 + 1); // 5 => cmd type, address, status, command response count, number of bytes
+                            index += (ch_data_len + 5); // 5 => cmd type, address, status, command response count, number of bytes
                         }
                         break;
                     case ProtocolMessagesG3PLC.DALI_RESPONSE_ID:
@@ -2071,8 +2074,58 @@ namespace CentralMaster
 			return sts;
 		}
 
+		public void SendNodeCommandsToDataServices()
+		{
+			if (node_devices == null)
+			{
+				LoadDevicesFromJsonFile();
+			}
+			DCLogger.Information("ServiceNode: send set_cmds to ui");
 
+			List<UICommands> tmp_ui_cmds_list = new List<UICommands>();
+			DCLogger.Information(string.Format("count of commands list {0}", tmp_ui_cmds_list.Count));
+			foreach (DeviceInfo di in node_devices.devices)
+			{
+				JsonCommand[] cmds = DeviceData.GetListOfSetCommands(di.device);
+				if ( (cmds != null)  && (cmds.Length > 0) )
+                {
+					// debug only
+					foreach (JsonCommand jc in cmds)
+					{
+						DCLogger.Information(string.Format("command in device => {0}", jc.name));
+					}
+					UICommands tmp_cmd = new UICommands();
+					tmp_cmd.UUID = di.uuid;
+					JsonCommandLite[] cmds_lite = new JsonCommandLite[cmds.Length];
+					for (int ii=0; ii < cmds.Length; ii++)
+                    {
+						cmds_lite[ii].name = cmds[ii].name;
+						cmds_lite[ii].description = cmds[ii].description;
+						cmds_lite[ii].type = cmds[ii].type;
+						cmds_lite[ii].value = cmds[ii].value;
+                    }
+					tmp_cmd.set_cmds = cmds_lite;
+					tmp_ui_cmds_list.Add(tmp_cmd);
+                }
+			}
+			DCLogger.Information(string.Format("count of commands list {0}", tmp_ui_cmds_list.Count));
+			if (tmp_ui_cmds_list.Count > 0)
+            {
+				TransferCommandList tcl = new TransferCommandList();
 
+				TransferCommands tcs = new TransferCommands();
+
+				tcs.NodeName = _common_name + "_" + _serial_num;
+				tcs.NodeCommands = tmp_ui_cmds_list.ToArray();
+				List<TransferCommands> l_tcs = new List<TransferCommands>();
+				l_tcs.Add(tcs);
+				tcl.Commands = l_tcs;
+				DCLogger.Information(string.Format("Sending commands to data services layer for node {0}", tcs.NodeName));
+				string tmp_str = System.Text.Json.JsonSerializer.Serialize<TransferCommandList>(tcl);
+				_dc_dataservice_comms.TransmitToDataService(tmp_str);
+			}
+
+		}
 		public byte[] GetRs232Rs485CommandData(JsonCommand send_json_cmd)
 		{
 			byte[] data_2_send = null;

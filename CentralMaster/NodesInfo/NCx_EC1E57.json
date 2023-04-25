@@ -1,0 +1,201 @@
+{
+   "devices": [
+    {
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d90",
+    "device": "Telaire_T8400_Temperature",
+    "channel":  0,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetTemperature",
+      "data_names":  "air_temperature:I",
+        "order": 0
+    }]}, 
+	{
+    "uuid": "f9d12790-4674-433e-b4de-1e7eef5fca03",
+    "device": "Telaire_T8400_RelativeHumidity",
+    "channel":  1,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [
+      {
+        "name": "GetRelativeHumidityPC",
+        "data_names": "rel_humidity:II",
+        "order": 1
+      }
+    ]},
+	{
+    "uuid": "9fe6fea5-edd6-48ea-8e1f-a738203b736a",
+    "device": "Telaire_T8400_CO2",
+    "channel":  2,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [
+      {
+        "name": "GetCO2Count",
+        "data_names": "co2_count:III",
+        "order": 2
+      }
+    ]},
+    {
+    "uuid": "be2f3b4d-54ba-46aa-b914-cb226505401a",
+    "device": "AutomationCompsDifferentialPressure",
+    "channel":  3,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetDifferentialPressure",
+      "data_names": "diff_pressure:IV",
+        "order": 3
+    }]},
+    {
+    "uuid": "154ef11f-0af2-4a42-9863-56905b12892b",
+    "device": "AutomationCompsVOC",
+    "channel":  4,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetVolatileOrgCompounds",
+      "data_names" : "voc:VII",
+        "order": 4
+    }]},
+    {
+    "uuid": "154ef11f-0af2-4a42-9863-56905b1289d14",
+    "device": "AutomationCompsVOC",
+    "channel":  12,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetVolatileOrgCompounds",
+      "data_names" : "voc:XX",
+        "order": 5
+    }]},
+    {
+    "uuid": "50bedb99-e2ca-46e9-b89d-64502393eba7",
+    "device": "Seimens_QSM2100_PM2_5",
+    "channel":  5,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetParticulateData2_5",
+      "data_names": "pm2_5:VIII",
+        "order": 6
+    }]},
+    {
+    "uuid": "9b9eab00-988a-4556-9e2d-42bf0a8130c1",
+    "device": "Seimens_QSM2100_PM10",
+    "channel":  6,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetParticulateData_PM10",
+      "data_names": "pm10:IX",
+        "order": 7
+    }]},
+	{
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d97",
+    "device": "Seimens_QSM2100_PM2_5",
+    "channel":  7,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetParticulateData2_5",
+      "data_names": "pm2_5:X",
+        "order": 8
+    }]},
+    {
+    "uuid": "d1e8d6e3-fa96-4758-9f10-1c6a0d9e7f25",
+    "device": "Seimens_QSM2100_PM10",
+    "channel":  8,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetParticulateData_PM10",
+      "data_names":  "pm10:XI",
+        "order": 9
+    }]},	
+    {
+    "uuid": "e193ed2e-4987-4fab-8991-658f8a9c1a52",
+    "device": "OptySecUVIntensity",
+    "channel":  9,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetUVIntensity",
+      "data_names" :  "uv_intensity:XII",
+        "order": 10
+    }]},	
+    {
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d10",
+    "device": "Seimens_QVM62_1_AirSpeed",
+    "channel":  10,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetAirSpeed",
+      "data_names": "air_speed:XIII",
+        "order": 11
+    }]},
+    {
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d11",
+    "device": "AutomationCompsCurrent",
+    "channel":  11,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetCurrent",
+      "data_names": "current:XIV",
+        "order": 12
+    }]},
+    {
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d13",
+    "device": "AtmosphericPressureSensor",
+    "channel":  15,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetAtmPressure",
+      "data_names": "atm_pressure:V",
+        "order": 13
+    }]},
+    {
+    "uuid": "9acc4e97-7b89-4cdb-955b-1c59a2731d13",
+    "device": "DS7505TemperatureSensor",
+    "channel":  0,
+    "config_command": "",
+    "init_command": "",
+    "data_commands": [{
+      "name": "GetBoardTemperature",
+      "data_names": "amb_temp_f:VI",
+        "order": 14
+    }]
+    }],
+  "computedData": {
+    "name": "ComputedAhDpHi", 
+    "uuid": "97141232-b4eb-427d-9d28-7c90e0065343",
+    "description": "compute data based on sensors in this node",
+    "compute": "ConvertData.GetComputedData",
+    "data_names": "power:XV, dew_point:XVI, heat_index:XVII, abs_humidity:XVIII, flow_rate:XIX", 
+    "data": [
+      {
+        "name": "AbsoluteHumidity",
+        "description": "0-100%",
+        "type": "byte",
+        "units": "gm/m^3"
+      },
+      {
+        "name": "DewPoint",
+        "description": "value in range 32 to 122 deg F",
+        "type": "uint",
+        "units": "deg F"
+      },
+      {
+        "name": "HeatIndex",
+        "description": "value in range 32 to 122 deg F",
+        "type": "uint",
+        "units": "deg F"
+      }
+    ]
+  }
+   
+}

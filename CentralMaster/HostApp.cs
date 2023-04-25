@@ -211,10 +211,53 @@ namespace CentralMaster
 			plc_init_timer.Interval = AppOptions.GetAppOptions.PLCCommTimeoutSecs * 1000;
 
 			dCDataServiceComms = new DCPipeServer(rd_pipeconnectionname);
+			((DCPipeServer)dCDataServiceComms).receivedMessage += ProcessMessageFromDataServices; 
 			((DCPipeServer)dCDataServiceComms).StartServer();
 		}
 
-        private bool WaitForResponse(ServiceNode sn, int timeOut_ms)
+		private void ProcessMessageFromDataServices(string recv_str) 
+		{
+            if (recv_str.StartsWith("get_cmds"))
+            {
+                // extract node name (format 'get_cmds:<node_name>')
+                string tmpNodeName = recv_str.Replace("get_cmds:", "");
+                if (tmpNodeName == recv_str)
+                {
+                    DCLogger.Error("no node name in get_cmds. recvd: " + recv_str);
+                }
+                else
+                {
+					tmpNodeName = tmpNodeName.Trim();
+                    DCLogger.Information("recvd get_cmds for node: " + tmpNodeName);
+					ServiceNode tmpsn = null;
+					// debug only
+					foreach (string key in node_name_dict.Keys)
+					{
+						DCLogger.Information(key);
+					}
+					lock (comm_ready_lock)
+					{
+						if (node_name_dict.ContainsKey(tmpNodeName))
+						{
+							tmpsn = node_name_dict[tmpNodeName];
+						}
+					}
+					if (tmpsn != null)
+                    {
+						DCLogger.Information("Host APP: send set_cmds to ui");
+						tmpsn.SendNodeCommandsToDataServices();
+                    }
+				}
+			}
+			else       // if it is a command need to send to appropriate node 
+			{
+
+			}
+
+        }
+
+
+		private bool WaitForResponse(ServiceNode sn, int timeOut_ms)
 		{
 			// Stopwatch stopwatch = new Stopwatch(); 
 			// stopwatch.Start();
@@ -249,8 +292,8 @@ namespace CentralMaster
 				{
 					if (node_name_dict.ContainsKey(node_cmd.Node))
 					{
-						tmpsn = comm_ready_node_dict[node_cmd.Node];
-						tmpsn.ProcessCommandFromDataService(node_cmd);
+						tmpsn = node_name_dict[node_cmd.Node];
+						//tmpsn.ProcessCommandFromDataService(node_cmd);
 					}
 				}
 				if (tmpsn != null)

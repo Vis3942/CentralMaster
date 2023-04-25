@@ -62,14 +62,16 @@
 
 Note: When commands are to be sent from the an external app to the DC (or Data Services Layer), use the following json
 to be able to identify the value to set, read the set_commands in the device json.
-
+// Notes: EventId => an optional string which the sender can track in the data response
 {
     "Node" : "nc1_000000050",
 	"UUID" : "9acc4e97-7b89-4cdb-955b-1c59a2731d93",
-	"EventId" : "" // an optional string which the sender can track in the data response
+	"EventId" : "", 
 	"Commands":
 	[
-      "Name": "Brightness",
-      "Value": "50"
+		{
+		  "Name": "Brightness",
+		  "Value": "50"
+		}
 	]
 }
