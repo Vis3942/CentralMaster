@@ -1095,6 +1095,7 @@ namespace CentralMaster
 			int ch_start_idx;
 			ushort pkt_id = BitConverter.ToUInt16(msg_bytes, 2);
 			int ii;
+			string tmp_str;
 			DCLogger.Debug($"procrrcmd: pkt_id {pkt_id}");
 
             try
@@ -1264,7 +1265,7 @@ namespace CentralMaster
 						{
 							ch_num = msg_bytes[index];
 							ch_start_idx = index + 1;
-							ch_data_len = 22; // 5 float values: 4 bytes each + 2 uint8 values
+							ch_data_len = 26; // 6 float values: 4 bytes each + 2 uint8 values
 							RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
 							if (tmp_rr_cmd != null)
 							{
@@ -1274,6 +1275,20 @@ namespace CentralMaster
 									foreach (var tmprd in list_rd)
 									{
 										tmprd.EventId = cmd_event_id;
+										tmp_str = "a";
+										if (tmp_rr_cmd.channel == 0)
+                                        {
+											tmp_str = "a";
+                                        }
+										else if (tmp_rr_cmd.channel == 1)
+                                        {
+											tmp_str = "b";
+                                        }
+										else if (tmp_rr_cmd.channel == 2)
+                                        {
+											tmp_str = "c";
+                                        }
+										tmprd.Name = tmprd.Name + "_" + tmp_str;
 									}
 									if (cmd_event_id.Length > 0)
 									{

@@ -16,7 +16,7 @@
   "DsLogPath": "/home/debian/dcdataservices/current",
   "SsLogPath": "/home/debian/statusservices/current",
   "SupportingService": "AzureTable",
-  "ParametersDirectory": "/var/tmp",
+  "ParametersDirectory": "/home/debian/config/centralmaster",
   "ProductNames": [ "APIPM1", "APIIAQ" ],
   "MetaPanId": "can be hex (this has to begin with 0x ) or int, converted in code",
   "PanId": "0x7542",
