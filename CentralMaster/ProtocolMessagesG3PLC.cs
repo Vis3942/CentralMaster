@@ -57,6 +57,8 @@ namespace CentralMaster
         public const ushort I2C_RESPONSE_ID = 0x0030;
         public const ushort IAQ_REQUEST_ID = 0x0031;
         public const ushort IAQ_RESPONSE_ID = 0x0032;
+        public const ushort LCON_COMMAND_ID = 0x0033;
+        public const ushort LCON_RESPONSE_ID = 0x0034;
 
 
 
@@ -883,6 +885,7 @@ namespace CentralMaster
                 case ANALOG_OUTPUT_RESPONSE_ID:
                 case I2C_COMMAND_ID:
                 case IAQ_REQUEST_ID:
+                case LCON_COMMAND_ID:
                     supp_pkt_id = true;
                     break;
                 default:
@@ -1538,6 +1541,271 @@ namespace CentralMaster
                 return 0xFFFF;
             }
         }
+
+        /// <summary>
+        /// Use this function to add LCON requests to base packet
+        /// after having generated Base packet using the GeneratePacketBase(....) function 
+        /// </summary>
+        /// <param name="pkt_type"></param>
+        /// <param name="pkt"></param>
+        /// <param name="pkt_size"></param>
+        /// <param name="channel_number"></param>
+        /// <returns>
+        /// returns 0xFFFFF 
+        ///     -> unsupported packet ids
+        ///     -> insufficient size for packet
+        /// else returns length of packet (details populated)
+        /// </returns>
+        public static ushort AddToPacketLCONCommand(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number)
+        {
+            // supported packet types in this function
+            // lcon_cmd
+            bool is_correct_type = false;
+            switch (pkt_id)
+            {
+                case LCON_COMMAND_ID:
+                    if ((pkt[2] == (byte)LCON_COMMAND_ID) && (pkt[3] == (byte)(LCON_COMMAND_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                default:
+                    // unknown type
+                    is_correct_type = false;
+                    break;
+            }
+            if (!is_correct_type)
+            {
+                return 0xFFFF;
+            }
+            else
+            {
+                int tmp_curr_len;
+                tmp_curr_len = pkt[0];
+                tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
+                if ((tmp_curr_len + 1 + 13) >= pkt_size)
+                {
+                    return 0xFFFF;
+                }
+                pkt[4]++; // increment channel count
+                // fill in data
+                pkt[tmp_curr_len] = (byte)channel_number;
+                tmp_curr_len++;  // channel number -> 1 byte
+                pkt[tmp_curr_len] = 0x00; // get analog0 status
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 4 analog0 float values are zero
+                pkt[tmp_curr_len+1] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len+2] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len+3] = 0x00; // 4 float values are zero
+                tmp_curr_len += 4;
+
+                pkt[tmp_curr_len] = 0x00; // get analog1 status
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 4 analog1 float values are zero
+                pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 2] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 3] = 0x00; // 4 float values are zero
+                tmp_curr_len += 4;
+
+                pkt[tmp_curr_len] = 0x00; // get dali status
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 4 analog0 float values are zero
+                pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                tmp_curr_len += 2;
+
+                pkt[0] = (byte)(tmp_curr_len);
+                pkt[1] = (byte)((tmp_curr_len) >> 8);
+                return (ushort)tmp_curr_len;
+            }
+        }
+
+        /// <summary>
+        /// Use this function to add LCON DALI Command to base packet
+        /// after having generated Base packet using the GeneratePacketBase(....) function 
+        /// </summary>
+        /// <param name="pkt_type"></param>
+        /// <param name="pkt"></param>
+        /// <param name="pkt_size"></param>
+        /// <param name="channel_number"></param>
+        /// <param name="dali_address"></param>
+        /// <param name="dali_command"></param>
+        /// <returns>
+        /// returns 0xFFFFF 
+        ///     -> unsupported packet ids
+        ///     -> insufficient size for packet
+        /// else returns length of packet (details populated)
+        /// </returns>
+        public static ushort AddToPacketLCONCommandDALI(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number, 
+                byte dali_address, byte dali_command)
+        {
+            // supported packet types in this function
+            // lcon_cmd
+            bool is_correct_type = false;
+            switch (pkt_id)
+            {
+                case LCON_COMMAND_ID:
+                    if ((pkt[2] == (byte)LCON_COMMAND_ID) && (pkt[3] == (byte)(LCON_COMMAND_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                default:
+                    // unknown type
+                    is_correct_type = false;
+                    break;
+            }
+            if (!is_correct_type)
+            {
+                return 0xFFFF;
+            }
+            else
+            {
+                int tmp_curr_len;
+                tmp_curr_len = pkt[0];
+                tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
+                if ((tmp_curr_len + 1 + 13) >= pkt_size)
+                {
+                    return 0xFFFF;
+                }
+                pkt[4]++; // increment channel count
+                // fill in data
+                pkt[tmp_curr_len] = (byte)channel_number;
+                tmp_curr_len++;  // channel number -> 1 byte
+                pkt[tmp_curr_len] = 1; // IGNORE analog0 value
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 4 analog0 float values are zero
+                pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 2] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 3] = 0x00; // 4 float values are zero
+                tmp_curr_len += 4;
+
+                pkt[tmp_curr_len] = 1; // igonore analog1 
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 4 analog1 float values are zero
+                pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 2] = 0x00; // 4 float values are zero
+                pkt[tmp_curr_len + 3] = 0x00; // 4 float values are zero
+                tmp_curr_len += 4;
+
+                pkt[tmp_curr_len] = 2; // set dali information and command
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = dali_address; 
+                pkt[tmp_curr_len + 1] = dali_command; 
+                tmp_curr_len += 2;
+
+                pkt[0] = (byte)(tmp_curr_len);
+                pkt[1] = (byte)((tmp_curr_len) >> 8);
+                return (ushort)tmp_curr_len;
+            }
+        }
+
+        /// <summary>
+        /// Use this function to add LCON analog0 or analog1 to base packet
+        /// after having generated Base packet using the GeneratePacketBase(....) function 
+        /// </summary>
+        /// <param name="pkt_type"></param>
+        /// <param name="pkt"></param>
+        /// <param name="pkt_size"></param>
+        /// <param name="channel_number"></param>
+        /// <param name="is_analog0"></param> // if true value is for analog0, else value is for analog1
+        /// <param name="analog_value></param>
+        /// <returns>
+        /// returns 0xFFFFF 
+        ///     -> unsupported packet ids
+        ///     -> insufficient size for packet
+        /// else returns length of packet (details populated)
+        /// </returns>
+        public static ushort AddToPacketLCONCommandAnalog(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number,
+                bool is_analog0, float analog_value)
+        {
+            // supported packet types in this function
+            // lcon_cmd
+            bool is_correct_type = false;
+            switch (pkt_id)
+            {
+                case LCON_COMMAND_ID:
+                    if ((pkt[2] == (byte)LCON_COMMAND_ID) && (pkt[3] == (byte)(LCON_COMMAND_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                default:
+                    // unknown type
+                    is_correct_type = false;
+                    break;
+            }
+            if (!is_correct_type)
+            {
+                return 0xFFFF;
+            }
+            else
+            {
+                int tmp_curr_len;
+                tmp_curr_len = pkt[0];
+                tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
+                if ((tmp_curr_len + 1 + 13) >= pkt_size)
+                {
+                    return 0xFFFF;
+                }
+                byte[] tmp_f_ba = BitConverter.GetBytes(analog_value);
+                pkt[4]++; // increment channel count
+                // fill in data
+                pkt[tmp_curr_len] = (byte)channel_number;
+                tmp_curr_len++;  // channel number -> 1 byte
+                if (is_analog0)
+                {
+                    pkt[tmp_curr_len] = 2; // set analog0 val // TODO: USE ENUMS HERE ???
+                    tmp_curr_len++;  // 
+                    pkt[tmp_curr_len] = tmp_f_ba[0]; // 4 analog0 float values are zero
+                    pkt[tmp_curr_len + 1] = tmp_f_ba[1]; // 4 float values are zero
+                    pkt[tmp_curr_len + 2] = tmp_f_ba[2]; // 4 float values are zero
+                    pkt[tmp_curr_len + 3] = tmp_f_ba[3]; // 4 float values are zero
+                }
+                else
+                {
+                    pkt[tmp_curr_len] = 1; // ignore
+                    tmp_curr_len++;  // 
+                    pkt[tmp_curr_len] = 0x00; // 4 analog0 float values are zero
+                    pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                    pkt[tmp_curr_len + 2] = 0x00; // 4 float values are zero
+                    pkt[tmp_curr_len + 3] = 0x00; // 4 float values are zero
+                }
+                tmp_curr_len += 4;
+
+                if (!is_analog0)
+                {
+                    pkt[tmp_curr_len] = 2; // set analog1 value
+                    tmp_curr_len++;  // 
+                    pkt[tmp_curr_len] = tmp_f_ba[0]; // 4 analog1 float values are zero
+                    pkt[tmp_curr_len + 1] = tmp_f_ba[1]; // 4 float values are zero
+                    pkt[tmp_curr_len + 2] = tmp_f_ba[2]; // 4 float values are zero
+                    pkt[tmp_curr_len + 3] = tmp_f_ba[3]; // 4 float values are zero
+
+                }
+                else
+                {
+                    pkt[tmp_curr_len] = 1; // ignore value
+                    tmp_curr_len++;  // 
+                    pkt[tmp_curr_len] = 0x00; // 4 analog1 float values are zero
+                    pkt[tmp_curr_len + 1] = 0x00; // 4 float values are zero
+                    pkt[tmp_curr_len + 2] = 0x00; // 4 float values are zero
+                    pkt[tmp_curr_len + 3] = 0x00; // 4 float values are zero
+
+                }
+                tmp_curr_len += 4;
+
+                pkt[tmp_curr_len] = 0x00; // ignore dali command
+                tmp_curr_len++;  // 
+                pkt[tmp_curr_len] = 0x00; // 
+                pkt[tmp_curr_len + 1] = 0x00; // 
+                tmp_curr_len += 2;
+
+                pkt[0] = (byte)(tmp_curr_len);
+                pkt[1] = (byte)((tmp_curr_len) >> 8);
+                return (ushort)tmp_curr_len;
+            }
+        }
+
 
 
     }

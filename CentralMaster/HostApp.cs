@@ -73,8 +73,9 @@ namespace CentralMaster
 		private CancellationTokenSource RRDCTaskCTS = new CancellationTokenSource();
 		private ServiceNode attaching_sn = null;
 		private BlockingCollection<byte[]> UIMessages = new BlockingCollection<byte[]>();
+		private BlockingCollection<string> UIMessagesStr = new BlockingCollection<string>();
 
-		private  int rd_rx_timeout_milliseconds = 3000;
+		private int rd_rx_timeout_milliseconds = 3000;
 		private UInt16 rd_number_of_nodes = 1;
 		private UInt16 rd_time_per_node_secs = 3; 
 		private double rd_node_reset_time_secs = 180;
@@ -217,6 +218,7 @@ namespace CentralMaster
 
 		private void ProcessMessageFromDataServices(string recv_str) 
 		{
+			bool sts;
             if (recv_str.StartsWith("get_cmds"))
             {
                 // extract node name (format 'get_cmds:<node_name>')
@@ -248,6 +250,24 @@ namespace CentralMaster
 						tmpsn.SendNodeCommandsToDataServices();
                     }
 				}
+			}
+			else if ( (recv_str.StartsWith("[")) && (recv_str.Contains("Node") ) )
+            {
+                // received command from UI or ext entity
+                // add it to message queue which will be handled in roundrobin DoRRWork
+                try
+                {
+                    sts = UIMessagesStr.TryAdd(recv_str);
+                    if (!sts)
+                    {
+                        DCLogger.Information($"Failed to add command from dataservices to queue {recv_str}");
+                    }
+                }
+                catch (Exception ee)
+                {
+					DCLogger.Error(ee, "Exception trying to add command from dataservices to queue");
+					DCLogger.Error($"{recv_str}");
+				}            
 			}
 			else       // if it is a command need to send to appropriate node 
 			{
@@ -284,9 +304,12 @@ namespace CentralMaster
 
 		public void ProcessDataFromDataServices(string json_cmds_list)
         {
+			DCLogger.Information(json_cmds_list);
 			CommandForNode[] node_cmds = System.Text.Json.JsonSerializer.Deserialize<CommandForNode[]>(json_cmds_list);
 			foreach (var node_cmd in node_cmds)
             {
+				// debug
+				DCLogger.Information($"Processing {node_cmd.Node} : {node_cmd.Commands}");
 				ServiceNode tmpsn = null;
 				lock (comm_ready_lock)
 				{
@@ -368,7 +391,6 @@ namespace CentralMaster
                     }
 				}
 			}
-			
 		}
 
 		public void StartApplication()
@@ -1200,6 +1222,7 @@ namespace CentralMaster
 		{
 			bool ui_message_available;
 			byte[] ui_msg_b;
+			string ui_msg_str;
 			List<ServiceNode> rr_sn = new List<ServiceNode>();
 			//int time_elapsed_ms = 0;
 			WriteMessage("Starting DoRRWork");
@@ -1377,23 +1400,28 @@ namespace CentralMaster
 				//await Task.Delay(TimeSpan.FromSeconds(rd_round_robin_task_sleep_secs), ct);
 				if ( (attach_sn_list.Count > 0) || (rr_index < rr_sn.Count) )
 				{
-					ui_message_available = UIMessages.TryTake(out ui_msg_b, 10, ct);
+					//ui_message_available = UIMessages.TryTake(out ui_msg_b, 10, ct);
+					ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 10, ct);
 				}
 				else 
 				{
-					ui_message_available = UIMessages.TryTake(out ui_msg_b, 1*1000, ct);
-					//ui_message_available = UIMessages.TryTake(out ui_msg_b, rd_round_robin_task_sleep_secs*1000, ct);
+					ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 1 * 1000, ct);
+					//ui_message_available = UIMessages.TryTake(out ui_msg_b, 1*1000, ct);
+					////ui_message_available = UIMessages.TryTake(out ui_msg_b, rd_round_robin_task_sleep_secs*1000, ct);
 				}
 				if (ui_message_available)
 				{
-					ProcessDataFromUI(ui_msg_b);
+					ProcessDataFromDataServices(ui_msg_str);
+					//ProcessDataFromUI(ui_msg_b);
 					// are there any more ui messages 
 					while (ui_message_available)
 					{
-						ui_message_available = UIMessages.TryTake(out ui_msg_b);
+						ui_message_available = UIMessagesStr.TryTake(out ui_msg_str);
+						//ui_message_available = UIMessages.TryTake(out ui_msg_b);
 						if (ui_message_available)
 						{
-							ProcessDataFromUI(ui_msg_b);
+							ProcessDataFromDataServices(ui_msg_str);
+							//ProcessDataFromUI(ui_msg_b);
 						}
 					}
 				}

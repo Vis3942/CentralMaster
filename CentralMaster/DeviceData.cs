@@ -204,6 +204,33 @@ namespace CentralMaster
             }
         }
 
+        public static JsonCommand SetCommand(string dev_name, string cmd_name)
+        {
+            if (!devices.ContainsKey(dev_name))
+            {
+                LoadDevice(dev_name);
+            }
+            if (devices.ContainsKey(dev_name))
+            {
+                JsonCommands tmp_jcmds = devices[dev_name];
+                JsonCommand ret_jcmd = null;
+                foreach (JsonCommand tmp_jc in tmp_jcmds.set_commands)
+                {
+                    if (tmp_jc.name.Equals(cmd_name))
+                    {
+                        ret_jcmd = tmp_jc;
+                        break;
+                    }
+                }
+                return ret_jcmd;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+
         public static List<ResponseData> ComputeValues(string dev_name, string cmd_name, byte[] response_b, int proc_data_start_idx, int proc_data_len)
         {
             if (!devices.ContainsKey(dev_name))

@@ -2,8 +2,8 @@
 <#@ output extension=".txt" #>
 <#
     int major    = 1;
-    int minor    = 2; 
-    int build    = 1; 
+    int minor    = 3; 
+    int build    = 0; 
 
     // build
     string version = String.Format("{0}.{1}.{2}", major, minor, build);

@@ -121,7 +121,8 @@ enum RRGetCommandTypes: int
 	RR_CMD_DIGITAL = 0x07,
 	RR_CMD_POWERMEASUREMENT = 0x08,
 	RR_CMD_I2C = 0x09,
-	RR_CMD_IAQ = 0x0A
+	RR_CMD_IAQ = 0x0A,
+	RR_CMD_LCON = 0x0B
 }
 
 namespace CentralMaster
@@ -437,6 +438,7 @@ namespace CentralMaster
 		private List<RRCommand> powermeasurement_cmd_list = new List<RRCommand>();
 		private List<RRCommand> i2c_cmd_list = new List<RRCommand>();
 		private List<RRCommand> iaq_cmd_list = new List<RRCommand>();
+		private List<RRCommand> lcon_cmd_list = new List<RRCommand>();
 		private List<int> rr_cmds_list = new List<int>();
 		private int curr_rr_cmd_index = -1;  // index into the rr_cmds_list
 		private string cmd_event_id = "";
@@ -1072,6 +1074,9 @@ namespace CentralMaster
 				case (int)RRGetCommandTypes.RR_CMD_IAQ:
 					loc_rr_cmd_list = iaq_cmd_list;
 					break;
+				case (int)RRGetCommandTypes.RR_CMD_LCON:
+					loc_rr_cmd_list = lcon_cmd_list;
+					break;
 				default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[curr_rr_cmd_index]}");
 					break;
@@ -1353,6 +1358,57 @@ namespace CentralMaster
 							index += (ch_data_len + 1);
 						}
 						break;
+					case ProtocolMessagesG3PLC.LCON_RESPONSE_ID:
+						//DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+						while (index < msg_bytes.Length)
+						{
+							ch_num = msg_bytes[index];
+							ch_start_idx = index + 1;
+							ch_data_len = 13; // 2 float values: 4 bytes each + 5 uint8 value
+							RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+							if (tmp_rr_cmd != null)
+							{
+								List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+								if (list_rd != null)
+								{
+									if ( (cmd_event_id != null) && (cmd_event_id.Length > 0) )
+                                    {
+										foreach (var tmprd in list_rd)
+										{
+											tmprd.EventId = cmd_event_id;
+										}
+										if (cmd_event_id.Length > 0)
+										{
+											cmd_event_id = "";
+										}
+									}
+                                    else
+                                    {
+										foreach (var tmprd in list_rd)
+										{
+											tmprd.EventId = "";
+										}
+									}
+									AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+									foreach (var tmp_rd in list_rd)
+									{
+										DCLogger.Debug(tmp_rd.ToString());
+									}
+								}
+							}
+							else
+							{
+								DCLogger.Debug($"Failed to find channel {ch_num}");
+								foreach (RRCommand rrcmd in loc_rr_cmd_list)
+								{
+									DCLogger.Debug($"cmd: {rrcmd.command_name}, dev name {rrcmd.device_name}, channel {rrcmd.channel}");
+								}
+
+							}
+							index += (ch_data_len + 1);
+						}
+						break;
+
 					default:
                         DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
                         break;
@@ -1705,49 +1761,49 @@ namespace CentralMaster
 			if ( node_devices != null ) 
 			{
 				if (rr_cmds_list.Count == 0)
-                {
+				{
 					foreach (DeviceInfo di in node_devices.devices)
 					{
 						if (di.config_command.Length != 0)
 						{
-                            RRCommand tmp_rr_cmd = new RRCommand
-                            {
-                                uuid = di.uuid,
-                                device_name = di.device,
-                                command_name = di.config_command,
-                                command_type = "config",
-                                channel = di.channel
-                            };
-                            config_cmd_list.Add(tmp_rr_cmd);
+							RRCommand tmp_rr_cmd = new RRCommand
+							{
+								uuid = di.uuid,
+								device_name = di.device,
+								command_name = di.config_command,
+								command_type = "config",
+								channel = di.channel
+							};
+							config_cmd_list.Add(tmp_rr_cmd);
 						}
 
 						if (di.init_command.Length != 0)
 						{
-                            RRCommand tmp_rr_cmd = new RRCommand
-                            {
-                                uuid = di.uuid,
-                                device_name = di.device,
-                                command_name = di.init_command,
-                                command_type = "init"
-                            };
-                            init_cmd_list.Add(tmp_rr_cmd);
+							RRCommand tmp_rr_cmd = new RRCommand
+							{
+								uuid = di.uuid,
+								device_name = di.device,
+								command_name = di.init_command,
+								command_type = "init"
+							};
+							init_cmd_list.Add(tmp_rr_cmd);
 						}
 
 						// ignore order for now
 						foreach (DataCommand dc in di.data_commands)
 						{
-                            RRCommand tmp_rr_cmd = new RRCommand
-                            {
-                                uuid = di.uuid,
-                                device_name = di.device,
-                                command_name = dc.name,
-                                command_type = "data",
+							RRCommand tmp_rr_cmd = new RRCommand
+							{
+								uuid = di.uuid,
+								device_name = di.device,
+								command_name = dc.name,
+								command_type = "data",
 								channel = di.channel,
 								data_names = dc.data_names
 							};
-                            string hw_interface = DeviceData.GetHWInterfaceForDevice(di.device);
+							string hw_interface = DeviceData.GetHWInterfaceForDevice(di.device);
 							switch (hw_interface.ToLower())
-                            {
+							{
 								case "rs232":
 									rs232_cmd_list.Add(tmp_rr_cmd);
 									break;
@@ -1772,24 +1828,27 @@ namespace CentralMaster
 								case "iaq":
 									iaq_cmd_list.Add(tmp_rr_cmd);
 									break;
+								case "lcon":
+									lcon_cmd_list.Add(tmp_rr_cmd);
+									break;
 								default:
 									DCLogger.Information($"unknown hw itnerfadce type {hw_interface}. Unable to process");
 									break;
-                            }
+							}
 						}
 					}
 					config_sent = false;
 					init_sent = false;
 					if (config_cmd_list.Count > 0)
-                    {
+					{
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_CONFIG);
 					}
 					if (init_cmd_list.Count > 0)
-                    {
+					{
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_INIT);
 					}
 					if (rs232_cmd_list.Count > 0)
-                    {
+					{
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_RS232);
 					}
 					if (rs485_cmd_list.Count > 0)
@@ -1813,12 +1872,16 @@ namespace CentralMaster
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_POWERMEASUREMENT);
 					}
 					if (i2c_cmd_list.Count > 0)
-                    {
+					{
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_I2C);
-                    }
+					}
 					if (iaq_cmd_list.Count > 0)
-                    {
+					{
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_IAQ);
+					}
+					if (lcon_cmd_list.Count > 0)
+                    {
+						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_LCON);
 					}
 				}
                 else
@@ -1887,6 +1950,9 @@ namespace CentralMaster
 					break;
 				case (int)RRGetCommandTypes.RR_CMD_IAQ:
 					loc_rr_cmd_list = iaq_cmd_list;
+					break;
+				case (int)RRGetCommandTypes.RR_CMD_LCON:
+					loc_rr_cmd_list = lcon_cmd_list;
 					break;
 				default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[cmd_list_index]}");
@@ -2051,6 +2117,21 @@ namespace CentralMaster
 					if (pkt_len == 0xFFFF)
 					{
 						DCLogger.Error($"IAQ: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+						return false;
+					}
+				}
+			}
+			else if (hw_interface_type.ToLower().Equals("lcon"))
+            {
+				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.LCON_COMMAND_ID, ref pkt, pkt.Length);
+				foreach (var rr_cmd in loc_rr_cmd_list)
+				{
+					//JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketLCONCommand(ProtocolMessagesG3PLC.LCON_COMMAND_ID, ref pkt, pkt.Length,
+						rr_cmd.channel);
+					if (pkt_len == 0xFFFF)
+					{
+						DCLogger.Error($"LCONCommand- status requet: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
 						return false;
 					}
 				}
@@ -2287,12 +2368,55 @@ namespace CentralMaster
             }
         }
 
+		public byte[] GetDALICommandData(JsonCommand send_json_cmd, Command ext_cmd)
+		{
+			byte[] data_2_send = null;
+			if (send_json_cmd.type.Equals("string[]", StringComparison.CurrentCultureIgnoreCase))
+			{
+				// parse the  command
+				// format "<address>, <command value>"
+				string[] data_str = ext_cmd.Value.Split(',');
+				if (data_str.Length != 2)
+				{
+					DCLogger.Information(string.Format("expected LCON DALI command \"address, command value\", got {0}",
+						send_json_cmd.value));
+					DCLogger.Information(string.Format("Cannot parse and send LCON DALI command"));
+					return null;
+				}
+				data_2_send = new byte[2];
+				byte tmp_b = Convert.ToByte(data_str[0]);
+				data_2_send[0] = tmp_b;
+				tmp_b = Convert.ToByte(data_str[1]);
+				data_2_send[1] = tmp_b;
+			}
+			else if (send_json_cmd.type.Equals("byte[]", StringComparison.CurrentCultureIgnoreCase))
+			{
+				data_2_send = ParseBinaryCommand(ext_cmd.Value);
+				//data_2_send = new byte[tmpb.Length + 2];
+				//data_2_send[0] = 1; // 0=> config, 1 => command
+				//data_2_send[1] = 0; // addressa is always zero for rs232 commands
+				//System.Array.Copy(tmpb, 0, data_2_send, 2, tmpb.Length);
+			}
+			return data_2_send;
+		}
+
 		public bool SendExtCommandWithTimeout(CommandForNode cmd_for_node)
         {
 			bool sts;
 			ushort pkt_len = 0;
 			byte[] pkt = null;
 			byte[] combo_pkt = null;
+
+			//// debug only
+			//DCLogger.Information($"cmd for node = {cmd_for_node == null}");
+			//DCLogger.Information($"commands in cmd for node = {cmd_for_node.Commands == null}");
+
+			if (cmd_for_node.Commands.Length != 1)
+            {
+				DCLogger.Information($"Expected Number of Commands is 1, got {cmd_for_node.Commands.Length}");
+				return false;
+            }
+
 			if (node_devices == null)
             {
 				LoadDevicesFromJsonFile();
@@ -2307,6 +2431,32 @@ namespace CentralMaster
 			if (dev_info == null)
             {
 				DCLogger.Error($"Failed to locate device with uuid {cmd_for_node.UUID} in Node {cmd_for_node.Node}");
+				// try to see if any of the devices set_cmds contain this command
+				// if unable to find then return false
+				foreach(DeviceInfo dinfo in node_devices.devices)
+                {
+					JsonCommands tmp_jcmds = DeviceData.GetDeviceInfo(dinfo.device);
+					if ( (tmp_jcmds != null) && (tmp_jcmds.set_commands.Length > 0) )
+                    {
+						// expecting only one command at a time in commands array in cmd_for_node
+						JsonCommand tmp_jcmd = Array.Find<JsonCommand>(tmp_jcmds.set_commands, x => x.name == cmd_for_node.Commands[0].Name);
+						if (tmp_jcmd != null)
+                        {
+							// found device
+							dev_info = dinfo;
+							DCLogger.Information($"Found {cmd_for_node.Commands[0].Name} in {dev_info.device} ");
+							break;
+						}
+					}
+					else
+                    {
+						DCLogger.Error($"Could not locate {cmd_for_node.Commands[0].Name} in {dinfo.device}");
+					}
+				}
+            }
+
+			if (dev_info == null)
+            {
 				return false;
             }
 
@@ -2403,6 +2553,69 @@ namespace CentralMaster
 					}
 				}
 			}
+			else if (hw_interface_type.ToLower().Equals("lcon"))
+            {
+				float conv_float;
+				pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.LCON_COMMAND_ID, ref pkt, pkt.Length);
+				foreach (var ext_cmd in cmd_for_node.Commands)
+				{
+					JsonCommand send_json_cmd = DeviceData.SetCommand(dev_info.device, ext_cmd.Name);
+					if (ext_cmd.Name.ToLower().Equals("set_dali_command"))
+                    {
+						// value is "address, command"
+						byte[] tmp_ba = GetDALICommandData(send_json_cmd, ext_cmd);
+						if (tmp_ba != null)
+                        {
+							pkt_len = ProtocolMessagesG3PLC.AddToPacketLCONCommandDALI(
+								ProtocolMessagesG3PLC.LCON_COMMAND_ID,
+								ref pkt, pkt.Length, dev_info.channel, tmp_ba[0], tmp_ba[1]	);							
+						}
+						else
+                        {
+							DCLogger.Error($"LCON set_dali_cmd: Unable to parse command {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
+							return false;
+                        }
+					}
+					else if (ext_cmd.Name.ToLower().Equals("set_analog0"))
+                    {
+						// value is float as string
+						sts = Single.TryParse(ext_cmd.Value, out conv_float);
+						if (sts)
+                        {
+							pkt_len = ProtocolMessagesG3PLC.AddToPacketLCONCommandAnalog(
+								ProtocolMessagesG3PLC.LCON_COMMAND_ID,
+								ref pkt, pkt.Length, dev_info.channel, true, conv_float);
+						}
+						else
+                        {
+							DCLogger.Error($"LCON set analog0: Error parsing value {send_json_cmd.value}");
+							return false;
+                        }
+					}
+					else if (ext_cmd.Name.ToLower().Equals("set_analog1"))
+                    {
+						// value is float as string
+						sts = Single.TryParse(ext_cmd.Value, out conv_float);
+						if (sts)
+						{
+							pkt_len = ProtocolMessagesG3PLC.AddToPacketLCONCommandAnalog(
+								ProtocolMessagesG3PLC.LCON_COMMAND_ID,
+								ref pkt, pkt.Length, dev_info.channel, false, conv_float);
+						}
+						else
+						{
+							DCLogger.Error($"LCON set analog1: Error parsing value {send_json_cmd.value}");
+							return false;
+						}
+					}
+					else
+                    {
+						// unsupported command
+						DCLogger.Error($"LCON cmd: unsupported command for {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
+						return false;
+                    }
+				}
+			}
 			else
 			{
 				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
@@ -2482,6 +2695,7 @@ namespace CentralMaster
 			StringBuilder sb = new StringBuilder();
 			DateTime curr_time = DateTime.Now;
 			sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Month, curr_time.Day, curr_time.Year - 2000));
+
 			sb.Append(string.Format("{0:d2}{1:d2}{2:d2}", curr_time.Hour, curr_time.Minute, curr_time.Second));
 			sb.Append(string.Format("{0:d2}", (int)curr_time.DayOfWeek ) );
 			time_b = ASCIIEncoding.ASCII.GetBytes(sb.ToString());

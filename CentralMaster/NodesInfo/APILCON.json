@@ -1,0 +1,18 @@
+{
+  "devices": [
+    {
+      "uuid": "6db2d930-d2a1-4f24-9902-c68717a310f7",
+      "device": "LCON_Device",
+      "channel": 0,
+      "config_command": "",
+      "init_command": "",
+      "data_commands": [
+        {
+          "name": "GetLCONData",
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "ComputedData": {}
+}
