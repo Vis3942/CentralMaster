@@ -1206,6 +1206,91 @@ namespace CentralMaster
 
         }
 
+
+        /// <summary>
+        /// Use this function to add Power Measurement requests to base packet
+        /// after having generated Base packet using the GeneratePacketBase(....) function 
+        /// </summary>
+        /// <param name="pkt_type"></param>
+        /// <param name="pkt"></param>
+        /// <param name="pkt_size"></param>
+        /// <param name="channel_number"></param>
+        /// <param name="on_off_cmd"></param>
+        /// <param name="brightness_cmd"></param>
+        /// <returns>
+        /// returns 0xFFFFF 
+        ///     -> unsupported packet ids
+        ///     -> insufficient size for packet
+        /// else returns length of packet (details populated)
+        /// </returns>
+        public static ushort AddToPacketPowerMeasRequest(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number, int on_off_cmd, int brightness_cmd)
+        {
+            // send onoff_cmd_val as 0 and brightness as 0, if the node needs to ignore the cmd values
+            // supported packet types in this function
+            // "power_meas_req"
+            bool is_correct_type = false;
+            switch (pkt_id)
+            {
+                case POWER_MEASUREMENT_REQUEST_ID:
+                    if ((pkt[2] == (byte)POWER_MEASUREMENT_REQUEST_ID) && (pkt[3] == (byte)(POWER_MEASUREMENT_REQUEST_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                default:
+                    // unknown type
+                    is_correct_type = false;
+                    break;
+            }
+            if (!is_correct_type)
+            {
+                return 0xFFFF;
+            }
+            else
+            {
+                int tmp_curr_len;
+                tmp_curr_len = pkt[0];
+                tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
+                if ((tmp_curr_len + 1) >= pkt_size)
+                {
+                    return 0xFFFF;
+                }
+                pkt[4]++; // increment channel count
+                // fill in data
+                pkt[tmp_curr_len] = (byte)channel_number;
+                tmp_curr_len++;  // channel number -> 1 byte
+                if ((on_off_cmd >= 0) && (on_off_cmd <= 2))
+                {
+                    // supported values
+                    pkt[tmp_curr_len] = (byte)on_off_cmd;
+                }
+                else
+                {
+                    // unsupported value received ignored
+                    DCLogger.Error($"Unsupported OnOffCmd received. Expected [0-2], recvd [{on_off_cmd}]. Set to Ignore, 0");
+                    pkt[tmp_curr_len] = (byte)0;
+                }
+                tmp_curr_len++;
+                if ((brightness_cmd >= 0) && (brightness_cmd <= 100))
+                {
+                    pkt[tmp_curr_len] = (byte)brightness_cmd;
+                }
+                else
+                {
+                    // unsupported value received ignored
+                    DCLogger.Error($"Unsupported brightness received. Expected [0-100], recvd [{brightness_cmd}]. Set to Ignore, 0");
+                    pkt[tmp_curr_len] = (byte)0;
+                }
+                tmp_curr_len++;
+                pkt[0] = (byte)(tmp_curr_len);
+                pkt[1] = (byte)((tmp_curr_len) >> 8);
+                return (ushort)tmp_curr_len;
+            }
+
+        }
+
+
+
         /// <summary>
         ///  Use this functin to Add channel analog input response data to base packet
         ///  after having generated Base packet using the GeneratePacketBase(....) function

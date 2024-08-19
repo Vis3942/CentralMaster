@@ -1,8 +1,8 @@
 ﻿<#@ template debug="false" hostspecific="false" language="C#" #>
 <#@ output extension=".txt" #>
 <#
-    int major    = 1;
-    int minor    = 3; 
+    int major    = 2;
+    int minor    = 0; 
     int build    = 0; 
 
     // build

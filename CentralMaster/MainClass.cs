@@ -38,6 +38,10 @@ namespace CentralMaster
 
 					HostApp happ = new HostApp();
 					happ.StartApplication();
+					while (true)
+                    {
+						System.Threading.Thread.Sleep(1000000);
+                    }
 				}
 				catch (Exception ex)
 				{

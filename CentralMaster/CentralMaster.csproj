@@ -2,14 +2,16 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="DCLogger.cs" />
+    <Compile Remove="HostMessages.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="32.0.3" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="5.0.0" />
     <PackageReference Include="System.Device.Gpio" Version="1.3.0" />
     <PackageReference Include="System.IO.Ports" Version="5.0.0" />
@@ -17,7 +19,7 @@
 
   <ItemGroup>
     <Reference Include="LogUtils">
-      <HintPath>..\..\LogUtils\LogUtils\bin\Release\netstandard2.0\LogUtils.dll</HintPath>
+      <HintPath>..\..\LogUtils\LogUtils\bin\Release\netstandard2.1\LogUtils.dll</HintPath>
     </Reference>
     <Reference Include="UtilsLibrary">
       <HintPath>..\req_libs\UtilsLibrary.dll</HintPath>

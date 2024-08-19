@@ -352,7 +352,7 @@ namespace CentralMaster
 		private byte[] _node_ipv6addr = null;
 		private string _node_ipv6addr_str = "";
 		private byte[] _extended_addr = null;
-		private CentralMaster.HostMessages _host_messaging = null;
+		private CentralMaster.HostMessagesMchip _host_messaging = null;
 		private ushort _current_state;
 		CancellationTokenSource msg_recv = new CancellationTokenSource();
 		private bool sentCommonNameRequest = false;
@@ -404,14 +404,13 @@ namespace CentralMaster
 		private Object _tx_rx_lock = new Object();
 
 		private AutoResetEvent resp_recv_event = new AutoResetEvent(false);
-		private AutoResetEvent confirmation_recv_event = new AutoResetEvent(false);
+		//private AutoResetEvent confirmation_recv_event = new AutoResetEvent(false);
 		private int rd_rx_timeout_milliseconds = 0;
 
 		private int rd_confirmation_timeout_millisecs;
 
 		private Object _state_machine_lock = new Object();
 		private bool _state_machine_exec = false;
-		private int link_qti = -1;
 		private DateTime _attach_time;
 		private DateTime _data_cmd_time;
 		private bool _is_in_subnetDC = false;
@@ -610,7 +609,7 @@ namespace CentralMaster
 
 		#endregion // property
 
-		public ServiceNode(byte[] node_ipv6addr, byte[] ext_addr, CentralMaster.HostMessages host_messaging,
+		public ServiceNode(byte[] node_ipv6addr, byte[] ext_addr, CentralMaster.HostMessagesMchip host_messaging,
 						   System.Timers.Timer app_timer, Communications.ITransmit itransmit_comms, 
 						   int rd_rx_timeout_ms, int rd_confirmation_timeout_secs,
 						   int rd_round_robin_task_sleep_secs, 
@@ -772,6 +771,7 @@ namespace CentralMaster
 			)
 			{
 				_current_state = (ushort)ServiceNodeStates.SHUTDOWN;
+				_exit_mode = true;
 				// state_changed = true;
 			}
 
@@ -851,7 +851,7 @@ namespace CentralMaster
 					//RollingFileLogger.Debug(string.Format("recv common: {0}, recv synctime {1}, recv capab {2}", receivedCommonNameResponse, receivedSyncTimeResponse, receivedCapabilityResponse));
 					if (receivedCommonNameResponse && receivedSyncTimeResponse )
 					{
-						//receivedProtocolSetupResponse = true;
+						receivedProtocolSetupResponse = true;
 						//SendProtocolSetupConfirmEventWithTimeout();
 					}
 				}
@@ -931,58 +931,24 @@ namespace CentralMaster
 		{
 			//byte[] msg_bytes = null;
 			//ushort tmpu16;
-			if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is CentralMaster.DataTransferIndication) )
+			if ( msg_recv[0] is CentralMaster.NodeAggregateMessage) 
 			{
 				// processs data 
 				//RollingFileLogger.Verbose("callling recv autoreset set ");
-				CentralMaster.DataTransferIndication dti = (CentralMaster.DataTransferIndication)msg_recv[1];
-				link_qti = (int)dti.link_quality; // this will be appended when sending data to GUI
-				//RollingFileLogger.Debug(dti.ToString());
-			// 	if ( (dti.data_recv[2+2] == 0x04) && (dti.data_recv[3+2] == 0x00) ) // +2 for addition for packaged messages
-			// 	{
-			// 		// need to add link quality indicator to message bytes ( 2 bytes for link quality id, and 2 bytes for teh value)
-			// 		msg_bytes = new byte[dti.data_recv.Length + 4]; // for link quality indication (current reproted values in range 0x00-0xFF but using uint16 for future upgrades)
-			// 		// it is data response, only then modify the capability
-			// 		Array.Copy(dti.data_recv, msg_bytes, dti.data_recv.Length);
-			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,0); // msg size at combined packet
-			// 		tmpu16 += 4;
-			// 		byte[] tmpb = BitConverter.GetBytes(tmpu16);
-			// 		msg_bytes[0] = tmpb[0];
-			// 		msg_bytes[1] = tmpb[1];
-			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,2); // msg szie of first packet 
-			// 		tmpu16 += 4;
-			// 		byte[] tmpb2 = BitConverter.GetBytes(tmpu16);
-			// 		msg_bytes[2] = tmpb2[0];
-			// 		msg_bytes[3] = tmpb2[1];
-			// 		tmpu16 = BitConverter.ToUInt16(msg_bytes,4+2); // number of capability ids in message
-			// 		tmpu16 += 1;
-			// 		tmpb = BitConverter.GetBytes(tmpu16);
-			// 		msg_bytes[4+2] = tmpb[0];
-			// 		msg_bytes[5+2] = tmpb[1];
-			// 		// little endian format
-			// 		msg_bytes[dti.data_recv.Length] = (byte)( (ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0x00FF );
-			// 		msg_bytes[dti.data_recv.Length+1] = (byte)( ((ushort)ServiceNodeCapability.CPB_LINK_QUALITY & 0xFF00) >> 8 );
-			// 		msg_bytes[dti.data_recv.Length+2] = dti.link_quality;
-			// 		msg_bytes[dti.data_recv.Length+3] = 0x00;
-			// 		//RollingFileLogger.Debug("finished modifying recv message data confirmation");
-			// 	}
-			// 	else 
-			// 	{
-			// 		msg_bytes = new byte[dti.data_recv.Length];
-			// 		Array.Copy(dti.data_recv, msg_bytes, dti.data_recv.Length);
-			// 	}
+				CentralMaster.NodeAggregateMessage loc_nam = (CentralMaster.NodeAggregateMessage)msg_recv[0];
 
-				if (dti.data_recv == null)
+				if (loc_nam.data_recv == null)
 				{
 					return;
 				}
 				// require a minimum of 6 bytes to process
-				if (dti.data_recv.Length < 5)
+				if (loc_nam.data_recv.Length < 5)
 				{
 					// TODO: send message to console that INVALID DATA is received
+					DCLogger.Debug($"Data indication invalid length: {loc_nam.data_recv.Length}");
 					return;
 				}
-				receive_id = BitConverter.ToUInt16(dti.data_recv, 2+2);	
+				receive_id = BitConverter.ToUInt16(loc_nam.data_recv, 2+2);	
 				DCLogger.Information(string.Format("tx id {0}, rx id {1}", transmit_id, receive_id));
 				if ( ((transmit_id+1) == receive_id) || 
 					 (transmit_id == ProtocolMessagesG3PLC.DATA_REQUEST_ID  && receive_id == ProtocolMessagesG3PLC.BRIDGENODE_DATA_RESPONSE_ID) ||
@@ -996,25 +962,11 @@ namespace CentralMaster
 					}
 				}
 				// copy data to recv global buffer
-				recv_b = new byte[dti.data_recv.Length];
-				Array.Copy(dti.data_recv, recv_b, dti.data_recv.Length);
+				recv_b = new byte[loc_nam.data_recv.Length];
+				Array.Copy(loc_nam.data_recv, recv_b, loc_nam.data_recv.Length);
 				//RollingFileLogger.Debug("SM: Process Recv Message State machine");
 				CheckExecuteStateMachine(true);
 				resp_recv_event.Set();
-			}
-			else if ( ((byte)msg_recv[0] == (byte)CommandTypes.DATA_TRANSFER) && (msg_recv[1] is CentralMaster.DataTransferConfirm) )
-			{
-
-				// if status is error, then call 
-				CentralMaster.DataTransferConfirm dtc = (CentralMaster.DataTransferConfirm) msg_recv[1];
-				DCLogger.Information(dtc.ToString());
-				confirmation_recv_event.Set();
-				if (dtc.status != 0x0000)
-				{
-					// an error occured, so relese the wait event, as we may not get a response
-					resp_recv_event.Set();
-					_exit_mode = true;
-				}
 			}
 		}
 
@@ -1029,6 +981,7 @@ namespace CentralMaster
 			{
 				_serial_num = tmp_parts[1];
 			}
+			DCLogger.Verbose($"node common name: {_common_name} with serial num: {_serial_num}");
 		}
 
 		private void ProcessAsRRCommand(byte[] msg_bytes)
@@ -1481,6 +1434,7 @@ namespace CentralMaster
                     TransferDataList tdl = new TransferDataList();
                     tdl.Items = node_recvd_data;
                     string tmpstr = System.Text.Json.JsonSerializer.Serialize(tdl);
+					DCLogger.Verbose(tmpstr);
                     DCLogger.Information("Sending to data services layer");
                     _dc_dataservice_comms.TransmitToDataService(tmpstr);
                 }
@@ -1586,7 +1540,7 @@ namespace CentralMaster
 		#region interface_funcs
 		public void Shutdown()
 		{
-			confirmation_recv_event.Set();
+			//confirmation_recv_event.Set();
 			resp_recv_event.Set();
 
 			shutdownRequest = true;
@@ -1616,7 +1570,8 @@ namespace CentralMaster
 
 		public void SendDetachMessage()
 		{
-			_host_messaging.SendDetachRequest(_extended_addr);
+			// do nothing for microchip solution
+			//_host_messaging.SendDetachRequest(_extended_addr);
 		}
 
 		//private void messageReceived()
@@ -1637,7 +1592,7 @@ namespace CentralMaster
 			transmit_id = BitConverter.ToUInt16(pkt, 2+2);
 			DCLogger.Information(string.Format("tx id {0}", transmit_id));
 			//return _host_messaging.SendDataToNode(pkt, _node_ipv6addr, true);			
-			return _host_messaging.SendDataToNode(pkt, HostApp.CoordinatorIPv6Address, _node_ipv6addr, true);
+			return _host_messaging.SendDataToNode(pkt, _node_ipv6addr);
 		}
 
 		#endregion // interface_funcs
@@ -2035,8 +1990,8 @@ namespace CentralMaster
 				foreach (var rr_cmd in loc_rr_cmd_list)
 				{
 					//JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
-					pkt_len = ProtocolMessagesG3PLC.AddToPacketDigitalAnalogPowerMeasIAQRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
-						rr_cmd.channel);
+					pkt_len = ProtocolMessagesG3PLC.AddToPacketPowerMeasRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
+						rr_cmd.channel, 0, 0);
 					if (pkt_len == 0xFFFF)
 					{
 						DCLogger.Error($"PowerMeasurement: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
@@ -2153,19 +2108,25 @@ namespace CentralMaster
 			_data_cmd_time = DateTime.Now;
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
 			DCLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
-			confirmation_recv_event.Reset();
-			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
-			if (sts)
+			//confirmation_recv_event.Reset();
+			//sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+			//if (sts)
+			//{
+			//	DCLogger.Information("Confirmation received. Wait for data request response");
+			//	resp_recv_event.Reset();
+			//	sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			//}
+			//else 
+			//{
+			//	DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
+			//	DCLogger.Information("Exiting centralmaster app.");
+			//	System.Environment.Exit(-1);
+			//}
+			resp_recv_event.Reset();
+			sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			if (!sts)
 			{
-				DCLogger.Information("Confirmation received. Wait for data request response");
-				resp_recv_event.Reset();
-				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
-			}
-			else 
-			{
-				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs/ 1000));
-				DCLogger.Information("Exiting centralmaster app.");
-				System.Environment.Exit(-1);
+				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
 			return sts;
 		}
@@ -2222,7 +2183,22 @@ namespace CentralMaster
 			}
 
 		}
-		public byte[] GetRs232Rs485CommandData(JsonCommand send_json_cmd)
+
+        public byte[] GetPowerMeasurementCommandData(JsonCommand send_json_cmd, Command ext_cmd)
+        {
+            byte[] data_2_send = null;
+            if (send_json_cmd.type.Equals("byte", StringComparison.CurrentCultureIgnoreCase))
+            {
+                // parse the  command
+                // 
+                data_2_send = new byte[1];
+                byte tmp_b = Convert.ToByte(ext_cmd.Value.Trim());
+                data_2_send[0] = tmp_b;
+            }
+            return data_2_send;
+        }
+
+        public byte[] GetRs232Rs485CommandData(JsonCommand send_json_cmd)
 		{
 			byte[] data_2_send = null;
 			if (send_json_cmd.type.Equals("string[]", StringComparison.CurrentCultureIgnoreCase))
@@ -2505,9 +2481,74 @@ namespace CentralMaster
 			}
 			else if (hw_interface_type.ToLower().Equals("powermeasurement"))
 			{
-				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
-			}
-			else if (hw_interface_type.ToLower().Equals("dali"))
+                pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length);
+                foreach (var ext_cmd in cmd_for_node.Commands)
+                {
+                    JsonCommand send_json_cmd = DeviceData.SetCommand(dev_info.device, ext_cmd.Name);
+                    byte[] cmd_data = GetPowerMeasurementCommandData(send_json_cmd, ext_cmd);
+                    int t_onoff = 0; // default ignore values
+                    int t_brightness = 0; // default ignore values
+                    if (ext_cmd.Name.ToLower().Contains("set_onoff"))
+                    {
+                        t_onoff = cmd_data[0];
+                    }
+                    else if (ext_cmd.Name.ToLower().Contains("set_brightness"))
+                    {
+                        t_brightness = cmd_data[0];
+                    }
+                    pkt_len = ProtocolMessagesG3PLC.AddToPacketPowerMeasRequest(ProtocolMessagesG3PLC.POWER_MEASUREMENT_REQUEST_ID, ref pkt, pkt.Length,
+                        dev_info.channel, t_onoff, t_brightness);
+                    if (pkt_len == 0xFFFF)
+                    {
+                        DCLogger.Error($"PowerMeasurement: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}");
+                        return false;
+                    }
+                    // curr_rr_cmd_index > rr_cmds_list.Count
+                    // temp fix not able process response
+                    rr_cmds_list.Clear();
+                    rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_POWERMEASUREMENT);
+                    curr_rr_cmd_index = 0;
+                    if (node_devices == null)
+                    {
+                        LoadDevicesFromJsonFile();
+                    }
+                    powermeasurement_cmd_list.Clear();
+
+                    foreach (DeviceInfo di in node_devices.devices)
+                    {
+                        // ignore order for now
+                        foreach (DataCommand dc in di.data_commands)
+                        {
+                            string hw_interface = DeviceData.GetHWInterfaceForDevice(di.device);
+                            if (hw_interface.ToLower().Equals("powermeasurement"))
+                            {
+                                RRCommand tmp_rr_cmd = new RRCommand
+                                {
+                                    uuid = di.uuid,
+                                    device_name = di.device,
+                                    command_name = dc.name,
+                                    command_type = "data",
+                                    channel = di.channel,
+                                    data_names = dc.data_names
+                                };
+                                switch (hw_interface.ToLower())
+                                {
+                                    case "powermeasurement":
+                                        powermeasurement_cmd_list.Add(tmp_rr_cmd);
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            }
+                            else
+                            {
+                                DCLogger.Information($"Set Ext Command unsupported hw itnerfadce type {hw_interface}. Unable to process");
+                            }
+                        }
+                    }
+                }
+            }
+            else if (hw_interface_type.ToLower().Equals("dali"))
 			{
 				DCLogger.Information($"Unimplemented HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
@@ -2631,23 +2672,34 @@ namespace CentralMaster
 				return false; // cannot do any furhter processing => probably invalid command
 			}
 			cmd_event_id = cmd_for_node.EventId;
+			if (cmd_event_id == null)
+            {
+				cmd_event_id = "";
+            }
 			_data_cmd_time = DateTime.Now;
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
 			//RollingFileLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
-			confirmation_recv_event.Reset();
-			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
-			if (sts)
+			//confirmation_recv_event.Reset();
+			//sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+			//if (sts)
+			//{
+			//	DCLogger.Information("Confirmation received. Wait for data request response");
+			//	resp_recv_event.Reset();
+			//	sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			//}
+			//else
+			//{
+			//	DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs / 1000));
+			//	DCLogger.Information("Exiting centralmaster app.");
+			//	System.Environment.Exit(-1);
+			//}
+			resp_recv_event.Reset();
+			sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			if (!sts)
 			{
-				DCLogger.Information("Confirmation received. Wait for data request response");
-				resp_recv_event.Reset();
-				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
-			else
-			{
-				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds", rd_confirmation_timeout_millisecs / 1000));
-				DCLogger.Information("Exiting centralmaster app.");
-				System.Environment.Exit(-1);
-			}
+
 			return sts;
 		}
 		public void ProcessCommandFromDataService(CommandForNode cmd_for_node)
@@ -2708,20 +2760,26 @@ namespace CentralMaster
 			_data_cmd_time = DateTime.Now; // we get a data response with proto setup too; so it could also be considered a command
 
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-			//RollingFileLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
-			confirmation_recv_event.Reset();
-			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
-			if (sts)
-			{
-				DCLogger.Information("Confirmation received. Wait for Protocol request response");
-				resp_recv_event.Reset();
-				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+            //RollingFileLogger.Verbose("callling recv autoreset reset and waitone 3000 ");
+            //confirmation_recv_event.Reset();
+            //sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+            //if (sts)
+            //{
+            //	DCLogger.Information("Confirmation received. Wait for Protocol request response");
+            //	resp_recv_event.Reset();
+            //	sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+            //}
+            //else 
+            //{
+            //	DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs/1000));
+            //}
+            resp_recv_event.Reset();
+            sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			if (!sts)
+            {
+				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
-			else 
-			{
-				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs/1000));
-			}
-			return sts;
+            return sts;
 		}
 
 
@@ -2748,17 +2806,23 @@ namespace CentralMaster
 
 			TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
 			//RollingFileLogger.Information("callling recv autoreset reset and waitone 3000 ");
-			confirmation_recv_event.Reset();
-			sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
-			if (sts)
+			//confirmation_recv_event.Reset();
+			//sts = confirmation_recv_event.WaitOne(rd_confirmation_timeout_millisecs);
+			//if (sts)
+			//{
+			//	DCLogger.Information("Confirmation received. Wait for Protocol confirm response");
+			//	resp_recv_event.Reset();
+			//	sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			//}
+			//else
+			//{
+			//	DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
+			//}
+			resp_recv_event.Reset();
+			sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
+			if (!sts)
 			{
-				DCLogger.Information("Confirmation received. Wait for Protocol confirm response");
-				resp_recv_event.Reset();
-				sts = resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
-			}
-			else
-			{
-				DCLogger.Information(String.Format("Confirmation NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
+				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
 			return sts;
 		}
@@ -2875,9 +2939,9 @@ namespace CentralMaster
 				System.Array.Copy(tmp_recv_b, 0, combo_pkt, 2, tmp_recv_b.Length);
 				//ushort combo_pkt_len = ProtocolMessagesG3PLC.AppendPacket(combo_pkt, (ushort)(tmp_recv_b.Length + 2), false, tmp_recv_b, (ushort)tmp_recv_b.Length);
 				TransmitDataToNode(combo_pkt, _node_ipv6addr, true);
-				confirmation_recv_event.Reset();
-				confirmation_recv_event.WaitOne();
-				DCLogger.Information("Confirmation received. Wait for data request response");
+				//confirmation_recv_event.Reset();
+				//confirmation_recv_event.WaitOne();
+				//DCLogger.Information("Confirmation received. Wait for data request response");
 
 				resp_recv_event.Reset();
 				resp_recv_event.WaitOne(rd_rx_timeout_milliseconds);
