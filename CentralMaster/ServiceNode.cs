@@ -444,11 +444,12 @@ namespace CentralMaster
 		private DataServiceCommunications.IDCDataServiceComms _dc_dataservice_comms = null;
 		private List<TransferData> node_recvd_data = new List<TransferData>();
 		private Dictionary<string, string> data_name_map = new Dictionary<string, string>();
+        private int dc_request_timeout_count;
 
-		#endregion // vars
+        #endregion // vars
 
-		#region property
-		public string CommonName
+        #region property
+        public string CommonName
 		{
 			get { return _common_name; }
 		}
@@ -637,7 +638,9 @@ namespace CentralMaster
 			_attach_time = DateTime.Now;
 			rd_rrtask_sleep_secs = rd_round_robin_task_sleep_secs;
 			_dc_dataservice_comms = dc_dataservice_comms;
-		}
+			dc_request_timeout_count = 0;
+
+        }
 
 
 		#region state_machine
@@ -2127,7 +2130,32 @@ namespace CentralMaster
 			if (!sts)
 			{
 				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
-			}
+				dc_request_timeout_count = dc_request_timeout_count + 1;
+				if (dc_request_timeout_count >= 4)
+				{
+					// write 1 to check_status.txt file at /tmp/check_status.txt
+					// Open the file for writing (this will create the file if it doesn't exist)
+					string filePath = @"/tmp/check_status.txt";
+					try
+					{
+						using (StreamWriter writer = new StreamWriter(filePath, false)) // 'false' overwrites existing file
+						{
+							writer.WriteLine("1");
+						}
+						DCLogger.Information($"Successfully wrote '1' to {filePath}");
+						DCLogger.Information("setup file for restart");
+					}
+					catch (Exception ex)
+					{
+						// Handle any errors that may have occurred
+						DCLogger.Error($"Err writing 1 to file: {ex.Message}");
+					}
+				}
+            }
+			else
+			{
+				dc_request_timeout_count = 0;
+            }
 			return sts;
 		}
 
