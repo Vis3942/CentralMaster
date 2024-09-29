@@ -12,6 +12,7 @@ using CentralMaster.DataServiceCommunications;
 using LogUtils;
 using System.Timers;
 using System.Security.Cryptography.X509Certificates;
+using static System.Net.WebRequestMethods;
 
 namespace CentralMaster
 {
@@ -106,6 +107,8 @@ namespace CentralMaster
 		private ManualResetEvent plc_init_timeout_event = new ManualResetEvent(false);
 		private bool plc_init_resp_recvd = true; // for microchip based systems; false for TI based systems
 		private System.Timers.Timer plc_init_timer = new System.Timers.Timer();
+
+		private const string cmd_file_path = @"/media/card/dblite/";
 		#endregion //vars
 
 		#region property
@@ -563,9 +566,9 @@ namespace CentralMaster
 			rd_pipeconnectionname = "PLSDCConnection";
 
 
-			if (File.Exists(PARAMETERS_FILE))
+			if (System.IO.File.Exists(PARAMETERS_FILE))
             {
-                var settingdata = File.ReadAllLines(PARAMETERS_FILE);
+                var settingdata = System.IO.File.ReadAllLines(PARAMETERS_FILE);
                 for (var i = 0; i < settingdata.Length; i++)
                 {
                     var line = settingdata[i];
@@ -1335,23 +1338,24 @@ namespace CentralMaster
 						System.Threading.Thread.Sleep(500);
 					}					
 				}
-				//else
-				//{
-				//	//debug 
-				//	RollingFileLogger.Information("current sn is null");
-				//}
+                //else
+                //{
+                //	//debug 
+                //	RollingFileLogger.Information("current sn is null");
+                //}
 
 
-				//ProcessDataFromUI();
-				//await Task.Delay(TimeSpan.FromSeconds(rd_round_robin_task_sleep_secs), ct);
-				if ( (attach_sn_list.Count > 0) || (rr_index < rr_sn.Count) )
+                //ProcessDataFromUI();
+                //ProcessCommandsFromFiles();
+                //await Task.Delay(TimeSpan.FromSeconds(rd_round_robin_task_sleep_secs), ct);
+                if ( (attach_sn_list.Count > 0) || (rr_index < rr_sn.Count) )
 				{
-					//ui_message_available = UIMessages.TryTake(out ui_msg_b, 10, ct);
-					ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 10, ct);
+                    //ui_message_available = UIMessages.TryTake(out ui_msg_b, 10, ct);
+                    ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 10, ct);
 				}
 				else 
 				{
-					ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 1 * 1000, ct);
+                    ui_message_available = UIMessagesStr.TryTake(out ui_msg_str, 1 * 1000, ct);
 					//ui_message_available = UIMessages.TryTake(out ui_msg_b, 1*1000, ct);
 					////ui_message_available = UIMessages.TryTake(out ui_msg_b, rd_round_robin_task_sleep_secs*1000, ct);
 				}
@@ -1447,11 +1451,101 @@ namespace CentralMaster
 			DCLogger.Information(message);
 		}
 
-		#endregion //threadsafe_set
+        #endregion //threadsafe_set
 
-		#region utils
-		#endregion //utils
+        #region utils
+        // Function to read JSON data from a file if no other process is writing to it
+        private string ReadJsonFromFileIfNotInUse(string filename)
+        {
+            try
+            {
+                // Try to open the file with exclusive access
+                using (FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    // If we can open the file, it means it's not in use
+                    using (StreamReader reader = new StreamReader(fs))
+                    {
+                        string jsonString = reader.ReadToEnd();
+                        var jsonObject = JsonSerializer.Deserialize<CommandForNode>(jsonString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-	}
+                        // Output the resulting object
+                        DCLogger.Information("Read command: " + jsonString);
+						return jsonString;
+                    }
+                }
+            }
+            catch (IOException ex)
+            {
+                // The file might be in use or locked
+                DCLogger.Error($"Error reading file {filename}: {ex.Message}");
+				return null;
+            }
+        }
+
+
+        public void ProcessCommandsFromFiles()
+        {
+			
+            //Function to check if a directory exists and list all *.json files in it
+			// Check if the directory exists
+
+            if (Directory.Exists(cmd_file_path))
+            {
+                try
+                {
+                    // Get all *.json files in the directory
+                    string[] jsonFiles = Directory.GetFiles(cmd_file_path, "*.json");
+
+                    // Check if there are any .json files
+                    if (jsonFiles.Length > 0)
+                    {
+                        foreach (string file in jsonFiles)
+                        {
+                            DCLogger.Information($"Processing cmd file {Path.GetFileName(file)}");
+                            string mycmd = ReadJsonFromFileIfNotInUse(file);
+							if (mycmd != null)
+							{
+								string tmpstr = "[" + mycmd + "]";
+                                try
+                                {
+                                    bool sts = UIMessagesStr.TryAdd(tmpstr);
+                                    if (!sts)
+                                    {
+                                        DCLogger.Information($"Failed to add command from dataservices to queue {tmpstr}");
+                                    }
+                                }
+                                catch (Exception ee)
+                                {
+                                    DCLogger.Error(ee, "Exception trying to add command from dataservices to queue");
+                                    DCLogger.Error($"{tmpstr}");
+                                }
+                            }
+                            else
+							{
+								DCLogger.Error($"Failed to process command {Path.GetFileName(file)}");
+							}
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No .json files found in the directory.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Handle exceptions such as access issues
+                    Console.WriteLine("Error listing files: " + ex.Message);
+                }
+            }
+            else
+            {
+                Console.WriteLine("Directory does not exist.");
+            }
+        }
+
+
+        #endregion //utils
+
+    }
 }
 

@@ -445,7 +445,8 @@ namespace CentralMaster
 		private List<TransferData> node_recvd_data = new List<TransferData>();
 		private Dictionary<string, string> data_name_map = new Dictionary<string, string>();
         private int dc_request_timeout_count;
-
+		private const string event_location_str = @"/media/card/dblite";
+		private CommandForNode ext_cmd_in_progress = null;
         #endregion // vars
 
         #region property
@@ -2727,6 +2728,10 @@ namespace CentralMaster
 			{
 				DCLogger.Information(String.Format("Response NOT received in {0} seconds.", rd_confirmation_timeout_millisecs / 1000));
 			}
+			else
+			{
+				DeleteFileIfNotInUse(cmd_for_node);
+            }
 
 			return sts;
 		}
@@ -2857,10 +2862,42 @@ namespace CentralMaster
 
 
 
-		#endregion // update_funcs
+        #endregion // update_funcs
 
-		#region ui_funcs
-		private void SendToUserInterface(byte[] ipv6_address, string common_name, string serial_num, byte[] data_to_send)
+        #region event_funcs
+        // Function to delete a file if no process is writing to it
+        public void DeleteFileIfNotInUse(CommandForNode tmpCmd)
+        {
+            try
+            {
+                string filename = tmpCmd.Node + tmpCmd.Commands[0].Name + ".json";
+
+                string fullPath = Path.Combine(event_location_str, filename);
+				if (File.Exists(fullPath))
+				{
+                    // Try to open the file with exclusive access
+                    using (FileStream fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                    {
+                        // If we can open the file, it means it's not in use
+                        fs.Close(); // Close the file stream to proceed with deletion
+                    }
+
+                    // Delete the file
+                    File.Delete(fullPath);
+					DCLogger.Information($" event file deleted successfully: {fullPath}");
+                }
+            }
+            catch (IOException ex)
+            {
+                // The file might be in use or locked
+                DCLogger.Error($"Error deleting event file: " + ex.Message);
+            }
+        }
+
+        #endregion // event_funcs
+
+        #region ui_funcs
+        private void SendToUserInterface(byte[] ipv6_address, string common_name, string serial_num, byte[] data_to_send)
 		{
 			if (_itransmit_comms == null)
 			{
