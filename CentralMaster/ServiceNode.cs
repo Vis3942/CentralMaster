@@ -122,7 +122,8 @@ enum RRGetCommandTypes: int
 	RR_CMD_POWERMEASUREMENT = 0x08,
 	RR_CMD_I2C = 0x09,
 	RR_CMD_IAQ = 0x0A,
-	RR_CMD_LCON = 0x0B
+	RR_CMD_LCON = 0x0B,
+	RR_CMD_INVENTRONICS = 0x0C
 }
 
 namespace CentralMaster
@@ -438,7 +439,9 @@ namespace CentralMaster
 		private List<RRCommand> i2c_cmd_list = new List<RRCommand>();
 		private List<RRCommand> iaq_cmd_list = new List<RRCommand>();
 		private List<RRCommand> lcon_cmd_list = new List<RRCommand>();
-		private List<int> rr_cmds_list = new List<int>();
+        private List<RRCommand> inventronics_cmd_list = new List<RRCommand>();
+        
+        private List<int> rr_cmds_list = new List<int>();
 		private int curr_rr_cmd_index = -1;  // index into the rr_cmds_list
 		private string cmd_event_id = "";
 		private DataServiceCommunications.IDCDataServiceComms _dc_dataservice_comms = null;
@@ -1034,7 +1037,10 @@ namespace CentralMaster
 				case (int)RRGetCommandTypes.RR_CMD_LCON:
 					loc_rr_cmd_list = lcon_cmd_list;
 					break;
-				default:
+                case (int)RRGetCommandTypes.RR_CMD_INVENTRONICS:
+                    loc_rr_cmd_list = inventronics_cmd_list;
+                    break;
+                default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[curr_rr_cmd_index]}");
 					break;
 			}
@@ -1365,6 +1371,57 @@ namespace CentralMaster
 							index += (ch_data_len + 1);
 						}
 						break;
+
+                    case ProtocolMessagesG3PLC.LIGHT_CTRL_RESPONSE_ID:
+                        //DCLogger.Information($" Unimplemented response id recvd => {pkt_id}");
+                        while (index < msg_bytes.Length)
+                        {
+                            ch_num = msg_bytes[index];
+                            ch_start_idx = index + 1;
+                            ch_data_len = 5; // 2 uint16 values: 2 bytes each + 1 uint8 value
+                            RRCommand tmp_rr_cmd = loc_rr_cmd_list.Find(x => x.channel == ch_num);
+                            if (tmp_rr_cmd != null)
+                            {
+                                List<ResponseData> list_rd = DeviceData.ComputeValues(tmp_rr_cmd.device_name, tmp_rr_cmd.command_name, msg_bytes, ch_start_idx, ch_data_len);
+                                if (list_rd != null)
+                                {
+                                    if ((cmd_event_id != null) && (cmd_event_id.Length > 0))
+                                    {
+                                        foreach (var tmprd in list_rd)
+                                        {
+                                            tmprd.EventId = cmd_event_id;
+                                        }
+                                        if (cmd_event_id.Length > 0)
+                                        {
+                                            cmd_event_id = "";
+                                        }
+                                    }
+                                    else
+                                    {
+                                        foreach (var tmprd in list_rd)
+                                        {
+                                            tmprd.EventId = "";
+                                        }
+                                    }
+                                    AddToTransferList(tmp_node_name, tmp_rr_cmd.uuid, list_rd);
+                                    foreach (var tmp_rd in list_rd)
+                                    {
+                                        DCLogger.Debug(tmp_rd.ToString());
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                DCLogger.Debug($"Failed to find channel {ch_num}");
+                                foreach (RRCommand rrcmd in loc_rr_cmd_list)
+                                {
+                                    DCLogger.Debug($"cmd: {rrcmd.command_name}, dev name {rrcmd.device_name}, channel {rrcmd.channel}");
+                                }
+
+                            }
+                            index += (ch_data_len + 1);
+                        }
+                        break;
 
 					default:
                         DCLogger.Information($" Unsupported response id recvd => {pkt_id}");
@@ -1790,7 +1847,10 @@ namespace CentralMaster
 								case "lcon":
 									lcon_cmd_list.Add(tmp_rr_cmd);
 									break;
-								default:
+                                case "inventronics":
+                                    inventronics_cmd_list.Add(tmp_rr_cmd);
+                                    break;
+                                default:
 									DCLogger.Information($"unknown hw itnerfadce type {hw_interface}. Unable to process");
 									break;
 							}
@@ -1841,6 +1901,10 @@ namespace CentralMaster
 					if (lcon_cmd_list.Count > 0)
                     {
 						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_LCON);
+					}
+					if (inventronics_cmd_list.Count > 0)
+					{
+						rr_cmds_list.Add((int)RRGetCommandTypes.RR_CMD_INVENTRONICS);
 					}
 				}
                 else
@@ -1913,7 +1977,10 @@ namespace CentralMaster
 				case (int)RRGetCommandTypes.RR_CMD_LCON:
 					loc_rr_cmd_list = lcon_cmd_list;
 					break;
-				default:
+                case (int)RRGetCommandTypes.RR_CMD_INVENTRONICS:
+                    loc_rr_cmd_list = inventronics_cmd_list;
+                    break;
+                default:
 					DCLogger.Information($"unknown command enum {rr_cmds_list[cmd_list_index]}");
 					break;
 			}
@@ -2095,7 +2162,22 @@ namespace CentralMaster
 					}
 				}
 			}
-			else
+			else if (hw_interface_type.ToLower().Equals("inventronics"))
+			{
+                pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.LIGHT_CTRL_REQUEST_ID, ref pkt, pkt.Length);
+                foreach (var rr_cmd in loc_rr_cmd_list)
+                {
+                    //JsonCommand send_json_cmd = DeviceData.GetCommand(rr_cmd.device_name, rr_cmd.command_name);
+                    pkt_len = ProtocolMessagesG3PLC.AddToPacketLightCtrlRequest(ProtocolMessagesG3PLC.LIGHT_CTRL_REQUEST_ID, ref pkt, pkt.Length,
+                        rr_cmd.channel, false, 0);
+                    if (pkt_len == 0xFFFF)
+                    {
+                        DCLogger.Error($"LCONCommand- status requet: Unable to add pkt from {rr_cmd.device_name} : {rr_cmd.command_name}");
+                        return false;
+                    }
+                }
+            }
+            else
 			{
 				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}
@@ -2686,7 +2768,39 @@ namespace CentralMaster
                     }
 				}
 			}
-			else
+			else if (hw_interface_type.ToLower().Equals("inventronics"))
+			{
+                pkt_len = ProtocolMessagesG3PLC.GeneratePacketBase(ProtocolMessagesG3PLC.LIGHT_CTRL_REQUEST_ID, ref pkt, pkt.Length);
+				if (pkt_len == 0xFFFF)
+				{
+					DCLogger.Error($"Unsupported command translating to {ProtocolMessagesG3PLC.LIGHT_CTRL_REQUEST_ID}");
+					return false;
+				}
+                foreach (var ext_cmd in cmd_for_node.Commands)
+                {
+                    JsonCommand send_json_cmd = DeviceData.GetCommand(dev_info.device, ext_cmd.Name);
+                    int conv_int;
+                    sts = int.TryParse(ext_cmd.Value, out conv_int);
+                    if (sts)
+                    {
+						if ( (conv_int >=  0) && (conv_int < 201) )
+						{
+                            pkt_len = ProtocolMessagesG3PLC.AddToPacketLightCtrlRequest(ProtocolMessagesG3PLC.LIGHT_CTRL_REQUEST_ID, ref pkt, pkt.Length, dev_info.channel, true, conv_int);
+                            if (pkt_len == 0xFFFF)
+                            {
+                                DCLogger.Error($"deivce: inventronics: Unable to add pkt from {dev_info.device} : {ext_cmd.Name}, value => {ext_cmd.Value}");
+                                return false;
+                            }
+                        }
+                    }
+					else
+					{
+						DCLogger.Error($"Failed to parse command data {ext_cmd.Value}");
+					}
+                }
+
+            }
+            else
 			{
 				DCLogger.Information($"Unsupported HW interface [{hw_interface_type}] found. Contact developer for more information.");
 			}

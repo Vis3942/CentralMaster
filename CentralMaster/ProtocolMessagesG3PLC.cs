@@ -59,6 +59,10 @@ namespace CentralMaster
         public const ushort IAQ_RESPONSE_ID = 0x0032;
         public const ushort LCON_COMMAND_ID = 0x0033;
         public const ushort LCON_RESPONSE_ID = 0x0034;
+        public const ushort GET_MAC_ID_COMMAND_ID = 0x0035;
+        public const ushort GET_MAC_ID_RESPONSE_ID = 0x0036;
+        public const ushort LIGHT_CTRL_REQUEST_ID = 0x0037;
+        public const ushort LIGHT_CTRL_RESPONSE_ID = 0x0038;
 
 
 
@@ -886,6 +890,7 @@ namespace CentralMaster
                 case I2C_COMMAND_ID:
                 case IAQ_REQUEST_ID:
                 case LCON_COMMAND_ID:
+                case LIGHT_CTRL_REQUEST_ID:
                     supp_pkt_id = true;
                     break;
                 default:
@@ -1703,6 +1708,75 @@ namespace CentralMaster
                 return (ushort)tmp_curr_len;
             }
         }
+
+
+        /// <summary>
+        /// Use this function to add lIGHT_CTRL or Inventronics request/command to base packet
+        /// after having generated Base packet using the GeneratePacketBase(....) function 
+        /// </summary>
+        /// <param name="pkt_type"></param>
+        /// <param name="pkt"></param>
+        /// <param name="pkt_size"></param>
+        /// <param name="channel_number"></param>
+        /// <returns>
+        /// returns 0xFFFFF 
+        ///     -> unsupported packet ids
+        ///     -> insufficient size for packet
+        /// else returns length of packet (details populated)
+        /// </returns>
+        public static ushort AddToPacketLightCtrlRequest(ushort pkt_id, ref byte[] pkt, int pkt_size, int channel_number, bool contains_cmd, int dimlevel)
+        {
+            // supported packet types in this function
+            // lcon_cmd
+            bool is_correct_type = false;
+            switch (pkt_id)
+            {
+                case LIGHT_CTRL_REQUEST_ID:
+                    if ((pkt[2] == (byte)LIGHT_CTRL_REQUEST_ID) && (pkt[3] == (byte)(LIGHT_CTRL_REQUEST_ID >> 8)))
+                    {
+                        is_correct_type = true;
+                    }
+                    break;
+                default:
+                    // unknown type
+                    is_correct_type = false;
+                    break;
+            }
+            if (!is_correct_type)
+            {
+                return 0xFFFF;
+            }
+            else
+            {
+                int tmp_curr_len;
+                tmp_curr_len = pkt[0];
+                tmp_curr_len = (ushort)(tmp_curr_len + (pkt[1] << 8));
+                if ((tmp_curr_len + 1 + 2) >= pkt_size) // 2 uint8's one for is command preent and second one is dimming value in range 0-200
+                {
+                    return 0xFFFF;
+                }
+                pkt[4]++; // increment channel count
+                // fill in data
+                pkt[tmp_curr_len] = (byte)channel_number;
+                tmp_curr_len++;  // channel number -> 1 byte
+                if (contains_cmd)
+                {
+                    pkt[tmp_curr_len] = 0x01; // command exists
+                    pkt[tmp_curr_len + 1] = (byte)dimlevel;
+                }
+                else
+                {
+                    pkt[tmp_curr_len] = 0; // command exists
+                    pkt[tmp_curr_len + 1] = (byte)255; // out of range working range is 0-200)
+                }
+                tmp_curr_len+=2;  // 
+
+                pkt[0] = (byte)(tmp_curr_len);
+                pkt[1] = (byte)((tmp_curr_len) >> 8);
+                return (ushort)tmp_curr_len;
+            }
+        }
+
 
         /// <summary>
         /// Use this function to add LCON DALI Command to base packet
